@@ -1,105 +1,71 @@
 # adbData
 
-Reliable file transfer between Android and Windows via ADB, with integrity verification and security features.
+High-performance Android file transfer via ADB with cryptographic integrity verification and security hardening.
 
 ![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-lightgrey.svg)
 ![PowerShell](https://img.shields.io/badge/PowerShell-5.1%2B-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 
----
+## Overview
 
-## Why This Tool?
+ADB-based file transfer utility addressing MTP protocol limitations (connection instability, data corruption, performance degradation). Implements cryptographic hash verification, atomic operations, and comprehensive security controls.
 
-Windows MTP has reliability issues: frequent freezing with large files, data corruption, slow transfers, connection drops. This tool uses ADB for stable, high-speed transfers with integrity verification.
+**Core Features:**
+- Cryptographic integrity verification (MD5/SHA256)
+- Incremental transfer with resume capability
+- Batch-optimized operations (250x faster enumeration)
+- Optional parallel transfer (experimental)
+- Command injection and path traversal protection
+- JSONL audit logging with rate limiting
 
-**Key Features:**
-- Hash verification (MD5/SHA256) for data integrity
-- High performance with optimized batch operations
-- Security: command injection protection, path traversal prevention, input validation
-- **Resume capability**: Skip existing files, interrupted transfer recovery
-- **Incremental transfers**: Automatically skip already-transferred files
-- **Parallel transfers**: Optional batch-based concurrent transfers (experimental)
-- Smart presets for common scenarios
+## Requirements
 
----
+- Windows 10+ / PowerShell 5.1+
+- ADB-enabled Android device (USB debugging)
+- Platform tools included in `platform-tools/`
 
-## Quick Start
+## Installation
 
-1. Download: `adbData_v1.0.0.zip`
-2. Extract to any folder
-3. Right-click `adbData.ps1` → **"Run with PowerShell"**
-4. Follow setup wizard
-5. Start transferring
+```powershell
+# Clone repository
+git clone https://github.com/yourusername/adbData.git
+cd adbData
 
-**Requirements:**
-- Windows 10+ with PowerShell 5.1+
-- Android device with USB debugging enabled
-- ADB platform tools (included in `platform-tools/`)
+# Execute main script
+.\adbData.ps1
+```
 
----
+## Architecture
 
-## Features
+### Performance Characteristics
+- 2-3x throughput vs MTP (large files)
+- 5-10x throughput vs MTP (small files)
+- Batch enumeration: 250x faster than individual queries
+- Configurable hash threshold: skip verification <100MB
+- Optional parallel mode: 3 concurrent threads for files <10MB
 
-### Core Functionality
-- **Smart Presets**: Camera, WhatsApp, Downloads, Screenshots
-- **Custom Transfers**: Any folder with recursive support
-- **Integrity Verification**: Hash-based (configurable threshold)
-- **Progress Tracking**: Real-time speed and ETA
-- **Atomic Operations**: No corrupted partial files
-- **Resume/Incremental**: Skip existing files, resume interrupted transfers
-- **Session Tracking**: Transfer history with completion status
+### Security Model
+- Command injection prevention (whitelist validation, parameter escaping)
+- Path traversal blocking (10+ attack pattern detection)
+- ADB binary verification (SHA256 whitelist)
+- Exclusive file locking (race condition prevention)
+- Memory wiping (secure data disposal)
+- Rate limiting: 50 req/sec, 1000 req/min
+- Timing-safe cryptographic comparison
 
-### Security
-- Command injection protection (whitelist validation, escaping)
-- Path traversal prevention (10+ attack patterns blocked)
-- ADB binary integrity check (SHA256 whitelist)
-- Race condition protection (exclusive file locking)
-- Memory security (secure data wiping)
-- Rate limiting (50/sec, 1000/min)
-- Comprehensive audit logging (JSONL format)
-- Input validation framework
-- Timing-safe hash comparison
-- Structured error handling
-
-### Performance
-- 2-3x faster than MTP for large files
-- 5-10x faster for many small files
-- Batch queries (250x faster file scanning)
-- Smart hash skipping (<100MB files)
-- Memory leak prevention
-- Automatic disk space check
-- Optional parallel transfers for small files (experimental)
-- Skip existing files for faster re-runs
-
----
-
-## Usage
-
-### Quick Transfer
-1. Select device
-2. Choose preset (e.g., Camera Photos)
-3. Wait for completion
-
-### Custom Transfer
-1. Select device
-2. Enter source path (e.g., `/sdcard/DCIM/Camera/`)
-3. Enter destination path (e.g., `D:\Photos\`)
-4. Configure options
-5. Transfer
-
-### Common Android Paths
-- `/sdcard/DCIM/Camera/` - Camera photos/videos
-- `/sdcard/Pictures/Screenshots/` - Screenshots
-- `/sdcard/WhatsApp/Media/` - WhatsApp media (Android <11)
-- `/sdcard/Android/media/com.whatsapp/WhatsApp/` - WhatsApp (Android 11+)
-- `/sdcard/Download/` - Downloads
+### Transfer Mechanics
+- Atomic operations (no partial file corruption)
+- Session persistence (`config/resume.json`)
+- Incremental sync (skip existing files)
+- Real-time progress tracking with ETA
+- Automatic disk space validation
 
 ---
 
 ## Configuration
 
-Settings: `config/settings.json`
+Configuration file: `config/settings.json` (auto-generated on first run)
 
 ```json
 {
@@ -108,7 +74,6 @@ Settings: `config/settings.json`
   "HashAlgorithm": "MD5",
   "MaxRetries": 3,
   "RetryDelaySeconds": 5,
-  "ShowProgressBar": true,
   
   "SmallFileThreshold": 104857600,
   "BatchSizeQueryLimit": 10000,
@@ -123,40 +88,58 @@ Settings: `config/settings.json`
 }
 ```
 
-**Key Parameters:**
-- `SmallFileThreshold`: Skip hash for files under this size (bytes)
-- `BatchSizeQueryLimit`: Max files per batch query
-- `GCInterval`: Garbage collection frequency (files)
-- `EnableParallelTransfer`: Enable parallel transfers (experimental, default: false)
-- `ParallelThreadCount`: Number of concurrent transfers (default: 3)
-- `ParallelFileThreshold`: Only parallel for files under this size (10MB)
-- `SanitizePaths`: Enable path security checks (recommended: true)
-- `ValidateADBSignature`: Verify ADB binary signature (requires admin)
+**Parameter Reference:**
+- `SmallFileThreshold`: Hash verification bypass threshold (100MB default)
+- `BatchSizeQueryLimit`: Maximum batch enumeration size (10K files)
+- `GCInterval`: Garbage collection trigger interval (1000 files)
+- `EnableParallelTransfer`: Concurrent transfer mode (experimental, disabled by default)
+- `ParallelThreadCount`: Parallel worker count (3 threads)
+- `ParallelFileThreshold`: Parallel eligibility threshold (10MB)
+- `SanitizePaths`: Path security validation (recommended: enabled)
+- `ValidateADBSignature`: Binary integrity verification (requires elevated privileges)
 
----
+## Usage
 
-## Troubleshooting
+**Preset Transfer:**
+```powershell
+# Launch interactive menu
+.\adbData.ps1
 
-**Device Not Found:**
-- Check USB debugging enabled
-- Accept "Allow USB debugging" prompt
-- Try different USB port
-- Run `adb devices` to verify connection
+# Select device → Choose preset (Camera/WhatsApp/Downloads/Screenshots)
+```
 
-**Transfer Failed:**
-- Check disk space
-- Ensure files not locked
-- Keep device awake
-- Review logs in `logs/` folder
+**Custom Transfer:**
+```powershell
+# Manual path specification
+Source: /sdcard/DCIM/Camera/
+Destination: D:\Backup\Photos\
+```
 
-**Hash Verification Slow:**
-- Use MD5 instead of SHA256
-- Increase `SmallFileThreshold`
-- Use USB 3.0
+**Common Android Paths:**
+- `/sdcard/DCIM/Camera/` - Camera output
+- `/sdcard/Pictures/Screenshots/` - Screenshot storage
+- `/sdcard/WhatsApp/Media/` - WhatsApp media (Android <11)
+- `/sdcard/Android/media/com.whatsapp/WhatsApp/` - WhatsApp (Android 11+)
+- `/sdcard/Download/` - Download directory
 
-**High Memory Usage:**
-- Decrease `GCInterval` to 500
-- Transfer in smaller batches
+## Diagnostics
+
+**Connection Issues:**
+- Verify USB debugging authorization on device
+- Test ADB connectivity: `.\platform-tools\adb.exe devices`
+- Check USB cable and port (USB 3.0 recommended)
+
+**Transfer Failures:**
+- Validate available disk space
+- Check file lock status and device screen state
+- Review transfer logs: `logs/transfer_*.log`
+- Inspect audit trail: `logs/transfer_*_audit.jsonl`
+
+**Performance Optimization:**
+- Hash algorithm: MD5 (faster) vs SHA256 (more secure)
+- Adjust `SmallFileThreshold` based on file size distribution
+- Enable parallel mode for small file batches
+- Reduce `GCInterval` if memory constrained (500 recommended)
 
 ---
 
@@ -164,33 +147,24 @@ Settings: `config/settings.json`
 
 ```
 adbData/
-├── adbData.ps1                  # Main script (all-in-one)
-├── README.md                    # Quick reference
-├── LICENSE                      # MIT License
-├── platform-tools/              # ADB binaries (included)
-│   ├── adb.exe
-│   ├── AdbWinApi.dll
-│   └── AdbWinUsbApi.dll
-├── config/                      # Auto-generated
-│   ├── settings.json
-│   ├── presets.json
-│   └── resume.json              # Transfer session tracking
-└── logs/                        # Transfer & audit logs
-    ├── transfer_*.log
-    ├── transfer_*_audit.jsonl
-    └── security_audit_*.log
+├── adbData.ps1                  # Main executable
+├── platform-tools/              # ADB binaries (bundled)
+├── config/                      # Runtime configuration
+│   ├── settings.json            # User preferences
+│   ├── presets.json             # Transfer templates
+│   └── resume.json              # Session state
+└── logs/                        # Telemetry and audit
+    ├── transfer_*.log           # Transfer events
+    ├── transfer_*_audit.jsonl   # Security audit trail
+    └── security_audit_*.log     # Security events
 ```
-
----
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) file.
+MIT License - See [LICENSE](LICENSE)
 
----
+## Development
 
-## Credits
-
-- Developer: Bugra
-- AI Assistant: Claude Sonnet 4.5 (Anthropic)
-- ADB: Google Android Platform Tools
+**Author:** Bugra  
+**AI Architecture:** Claude Sonnet 4.5 (Anthropic)  
+**ADB Platform:** Google Android SDK Platform Tools
