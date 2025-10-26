@@ -2883,23 +2883,23 @@ function Show-Disclaimer {
     Clear-Host
     Write-Host ""
     Write-Host "===============================================================================" -ForegroundColor Yellow
-    Write-Host "                          ⚠️  DISCLAIMER - PAGE 1/2                            " -ForegroundColor Yellow
+    Write-Host "                          [!] DISCLAIMER - PAGE 1/2                            " -ForegroundColor Yellow
     Write-Host "===============================================================================" -ForegroundColor Yellow
     Write-Host ""
-    Write-Host "  ⚠️  WARNING: NOT EXTENSIVELY TESTED" -ForegroundColor Red
+    Write-Host "  [!] WARNING: NOT EXTENSIVELY TESTED" -ForegroundColor Red
     Write-Host "  This software is provided AS-IS without any warranty." -ForegroundColor Yellow
     Write-Host "  Use at your own risk. Always backup your data first." -ForegroundColor Yellow
     Write-Host ""
     Write-Host "  WHAT THIS TOOL DOES:" -ForegroundColor Cyan
-    Write-Host "  ✓ Transfers files from Android → Windows via ADB" -ForegroundColor White
-    Write-Host "  ✓ READ-ONLY on Android (files never modified/deleted)" -ForegroundColor Green
-    Write-Host "  ✓ Hash verification for data integrity" -ForegroundColor White
-    Write-Host "  ✓ Atomic operations (no partial file corruption)" -ForegroundColor White
+    Write-Host "  + Transfers files from Android to Windows via ADB" -ForegroundColor White
+    Write-Host "  + READ-ONLY on Android (files never modified/deleted)" -ForegroundColor Green
+    Write-Host "  + Hash verification for data integrity" -ForegroundColor White
+    Write-Host "  + Atomic operations (no partial file corruption)" -ForegroundColor White
     Write-Host ""
     Write-Host "  REQUIREMENTS:" -ForegroundColor Cyan
-    Write-Host "  • USB Debugging enabled on Android device" -ForegroundColor White
-    Write-Host "  • Device authorization (prompt on first connect)" -ForegroundColor White
-    Write-Host "  • Sufficient disk space on destination" -ForegroundColor White
+    Write-Host "  - USB Debugging enabled on Android device" -ForegroundColor White
+    Write-Host "  - Device authorization (prompt on first connect)" -ForegroundColor White
+    Write-Host "  - Sufficient disk space on destination" -ForegroundColor White
     Write-Host ""
     Write-Host "  NO WARRANTY - NO LIABILITY:" -ForegroundColor Red
     Write-Host "  Author is NOT responsible for any data loss or damage." -ForegroundColor Yellow
@@ -2917,25 +2917,25 @@ function Show-Disclaimer {
     Write-Host "===============================================================================" -ForegroundColor Yellow
     Write-Host ""
     Write-Host "  ANDROID DEVICE SAFETY:" -ForegroundColor Green
-    Write-Host "  ✓ READ-ONLY access - files NEVER modified on device" -ForegroundColor White
-    Write-Host "  ✓ Files are COPIED, not moved (originals remain intact)" -ForegroundColor White
-    Write-Host "  ✓ Safe to interrupt - device data unaffected" -ForegroundColor White
+    Write-Host "  + READ-ONLY access - files NEVER modified on device" -ForegroundColor White
+    Write-Host "  + Files are COPIED, not moved (originals remain intact)" -ForegroundColor White
+    Write-Host "  + Safe to interrupt - device data unaffected" -ForegroundColor White
     Write-Host ""
     Write-Host "  DATA INTEGRITY:" -ForegroundColor Cyan
-    Write-Host "  • Hash verification (MD5/SHA256)" -ForegroundColor White
-    Write-Host "  • Atomic operations prevent corruption" -ForegroundColor White
-    Write-Host "  • Transaction logs track all operations" -ForegroundColor White
-    Write-Host "  • Disk space validation before transfer" -ForegroundColor White
+    Write-Host "  - Hash verification (MD5/SHA256)" -ForegroundColor White
+    Write-Host "  - Atomic operations prevent corruption" -ForegroundColor White
+    Write-Host "  - Transaction logs track all operations" -ForegroundColor White
+    Write-Host "  - Disk space validation before transfer" -ForegroundColor White
     Write-Host ""
     Write-Host "  SECURITY FEATURES:" -ForegroundColor Cyan
-    Write-Host "  • Command injection protection" -ForegroundColor White
-    Write-Host "  • Path traversal prevention" -ForegroundColor White
-    Write-Host "  • Rate limiting & audit logging" -ForegroundColor White
+    Write-Host "  - Command injection protection" -ForegroundColor White
+    Write-Host "  - Path traversal prevention" -ForegroundColor White
+    Write-Host "  - Rate limiting & audit logging" -ForegroundColor White
     Write-Host ""
     Write-Host "  BY PROCEEDING, YOU:" -ForegroundColor Red
-    Write-Host "  • Acknowledge this is experimental software" -ForegroundColor Yellow
-    Write-Host "  • Accept full responsibility for any consequences" -ForegroundColor Yellow
-    Write-Host "  • Confirm you have backed up important data" -ForegroundColor Yellow
+    Write-Host "  - Acknowledge this is experimental software" -ForegroundColor Yellow
+    Write-Host "  - Accept full responsibility for any consequences" -ForegroundColor Yellow
+    Write-Host "  - Confirm you have backed up important data" -ForegroundColor Yellow
     Write-Host ""
     Write-Host "===============================================================================" -ForegroundColor Yellow
     Write-Host ""
