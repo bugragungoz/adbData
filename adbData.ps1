@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Android File Transfer Tool - Reliable file transfer between Android devices and Windows PC
+    adbData - High-performance Android file transfer via ADB with cryptographic integrity verification
 
 .DESCRIPTION
     A PowerShell-based tool using ADB (Android Debug Bridge) to provide reliable, high-speed 
@@ -16,11 +16,11 @@
     License        : MIT License
     
 .LINK
-    https://github.com/bugra/android-transfer-tool
+    https://github.com/bugragungoz/adbData
 
 .EXAMPLE
     .\adbData.ps1
-    Runs the interactive Android File Transfer Tool
+    Runs the interactive adbData tool
 
 #>
 
@@ -2864,7 +2864,7 @@ function Show-Banner {
     Write-Host "         ##    ## ##    ##  ##     ##  ##   ##   ##                             " -ForegroundColor Cyan
     Write-Host "          ######  ##     ##  #######  ##     ## ########                        " -ForegroundColor Cyan
     Write-Host "                                                                                " -ForegroundColor Cyan
-    Write-Host "         Reliable File Transfer Tool for Android Devices v$($script:Version)    " -ForegroundColor Cyan
+    Write-Host "         High-Performance Android File Transfer via ADB v$($script:Version)     " -ForegroundColor Cyan
     Write-Host "                                                                                " -ForegroundColor Cyan
     Write-Host "================================================================================" -ForegroundColor Cyan
     Write-Host ""
@@ -2886,7 +2886,7 @@ function Show-Disclaimer {
     Write-Host "                              LEGAL DISCLAIMER                                  " -ForegroundColor Yellow
     Write-Host "===============================================================================" -ForegroundColor Yellow
     Write-Host ""
-    Write-Host "  This Android File Transfer Tool:" -ForegroundColor White
+    Write-Host "  adbData:" -ForegroundColor White
     Write-Host ""
     Write-Host "  * Transfers files between Android devices and Windows PC" -ForegroundColor Cyan
     Write-Host "  * Uses ADB (Android Debug Bridge) for reliable transfers" -ForegroundColor Cyan
@@ -3487,10 +3487,10 @@ function Show-Help {
             Write-Host "                       ABOUT & CREDITS                           " -ForegroundColor Green
             Write-Host "  ===============================================================" -ForegroundColor Green
             Write-Host ""
-            Write-Host "  adbData - ADB File Transfer Tool v$($script:Version)" -ForegroundColor Cyan
+            Write-Host "  adbData v$($script:Version)" -ForegroundColor Cyan
             Write-Host ""
             Write-Host "  DESCRIPTION:" -ForegroundColor Yellow
-            Write-Host "  Reliable, high-speed file transfer between Android and Windows" -ForegroundColor White
+            Write-Host "  High-performance Android file transfer via ADB" -ForegroundColor White
             Write-Host "  via ADB with integrity verification and security features." -ForegroundColor White
             Write-Host ""
             Write-Host "  DEVELOPER:" -ForegroundColor Yellow
