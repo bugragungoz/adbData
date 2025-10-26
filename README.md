@@ -41,6 +41,33 @@ cd adbData
 .\adbData.ps1
 ```
 
+### Execution Policy Error Fix
+
+If you encounter `"cannot be loaded. The file is not digitally signed"` error:
+
+**Option 1 (Recommended):** Unblock the file
+```powershell
+Unblock-File -Path .\adbData.ps1
+.\adbData.ps1
+```
+
+**Option 2:** Bypass execution policy for current session
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\adbData.ps1
+```
+
+**Option 3:** Run with bypass flag (one-liner)
+```powershell
+powershell -ExecutionPolicy Bypass -File .\adbData.ps1
+```
+
+**Option 4:** Set user-level policy (permanent)
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned -Force
+.\adbData.ps1
+```
+
 ## Architecture
 
 ### Performance Characteristics
