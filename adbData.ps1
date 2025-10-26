@@ -2883,45 +2883,59 @@ function Show-Disclaimer {
     Clear-Host
     Write-Host ""
     Write-Host "===============================================================================" -ForegroundColor Yellow
-    Write-Host "                              LEGAL DISCLAIMER                                  " -ForegroundColor Yellow
+    Write-Host "                          ⚠️  DISCLAIMER - PAGE 1/2                            " -ForegroundColor Yellow
     Write-Host "===============================================================================" -ForegroundColor Yellow
     Write-Host ""
-    Write-Host "  adbData:" -ForegroundColor White
+    Write-Host "  ⚠️  WARNING: NOT EXTENSIVELY TESTED" -ForegroundColor Red
+    Write-Host "  This software is provided AS-IS without any warranty." -ForegroundColor Yellow
+    Write-Host "  Use at your own risk. Always backup your data first." -ForegroundColor Yellow
     Write-Host ""
-    Write-Host "  * Transfers files between Android devices and Windows PC" -ForegroundColor Cyan
-    Write-Host "  * Uses ADB (Android Debug Bridge) for reliable transfers" -ForegroundColor Cyan
-    Write-Host "  * Performs READ-ONLY operations on Android device (SAFE)" -ForegroundColor Green
-    Write-Host "  * Performs WRITE operations on Windows PC only" -ForegroundColor Cyan
-    Write-Host "  * Never modifies, deletes, or moves files on Android device" -ForegroundColor Green
-    Write-Host "  * Includes hash verification to ensure data integrity" -ForegroundColor Cyan
-    Write-Host "  * Checks disk space before transfer to prevent failures" -ForegroundColor Cyan
+    Write-Host "  WHAT THIS TOOL DOES:" -ForegroundColor Cyan
+    Write-Host "  ✓ Transfers files from Android → Windows via ADB" -ForegroundColor White
+    Write-Host "  ✓ READ-ONLY on Android (files never modified/deleted)" -ForegroundColor Green
+    Write-Host "  ✓ Hash verification for data integrity" -ForegroundColor White
+    Write-Host "  ✓ Atomic operations (no partial file corruption)" -ForegroundColor White
+    Write-Host ""
+    Write-Host "  REQUIREMENTS:" -ForegroundColor Cyan
+    Write-Host "  • USB Debugging enabled on Android device" -ForegroundColor White
+    Write-Host "  • Device authorization (prompt on first connect)" -ForegroundColor White
+    Write-Host "  • Sufficient disk space on destination" -ForegroundColor White
+    Write-Host ""
+    Write-Host "  NO WARRANTY - NO LIABILITY:" -ForegroundColor Red
+    Write-Host "  Author is NOT responsible for any data loss or damage." -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "===============================================================================" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "  Press [ENTER] to view detailed information (Page 2/2)... " -ForegroundColor Gray -NoNewline
+    $null = Read-Host
+    
+    # Page 2 - Detailed information
+    Clear-Host
+    Write-Host ""
+    Write-Host "===============================================================================" -ForegroundColor Yellow
+    Write-Host "                      DETAILED INFORMATION - PAGE 2/2                          " -ForegroundColor Yellow
+    Write-Host "===============================================================================" -ForegroundColor Yellow
     Write-Host ""
     Write-Host "  ANDROID DEVICE SAFETY:" -ForegroundColor Green
-    Write-Host "  + READ-ONLY access - Android files are NEVER modified" -ForegroundColor Green
-    Write-Host "  + Original files remain untouched on device" -ForegroundColor Green
-    Write-Host "  + Only pulls (copies) files, never pushes or deletes" -ForegroundColor Green
-    Write-Host "  + Safe to interrupt transfer - device data unaffected" -ForegroundColor Green
+    Write-Host "  ✓ READ-ONLY access - files NEVER modified on device" -ForegroundColor White
+    Write-Host "  ✓ Files are COPIED, not moved (originals remain intact)" -ForegroundColor White
+    Write-Host "  ✓ Safe to interrupt - device data unaffected" -ForegroundColor White
     Write-Host ""
-    Write-Host "  IMPORTANT REQUIREMENTS:" -ForegroundColor Red
-    Write-Host "  - Android device must have USB Debugging enabled" -ForegroundColor Yellow
-    Write-Host "  - Device must be authorized (you'll see prompt on first connect)" -ForegroundColor Yellow
-    Write-Host "  - Sufficient storage space required on destination drive" -ForegroundColor Yellow
-    Write-Host "  - ADB (Android Debug Bridge) must be installed" -ForegroundColor Yellow
+    Write-Host "  DATA INTEGRITY:" -ForegroundColor Cyan
+    Write-Host "  • Hash verification (MD5/SHA256)" -ForegroundColor White
+    Write-Host "  • Atomic operations prevent corruption" -ForegroundColor White
+    Write-Host "  • Transaction logs track all operations" -ForegroundColor White
+    Write-Host "  • Disk space validation before transfer" -ForegroundColor White
     Write-Host ""
-    Write-Host "  DATA SAFETY:" -ForegroundColor Green
-    Write-Host "  + Files are COPIED, not moved (originals remain on device)" -ForegroundColor Cyan
-    Write-Host "  + Hash verification ensures no corruption during transfer" -ForegroundColor Cyan
-    Write-Host "  + Atomic operations prevent partial/corrupted files" -ForegroundColor Cyan
-    Write-Host "  + Transaction logs track all operations" -ForegroundColor Cyan
-    Write-Host "  + Disk space checked before transfer starts" -ForegroundColor Cyan
+    Write-Host "  SECURITY FEATURES:" -ForegroundColor Cyan
+    Write-Host "  • Command injection protection" -ForegroundColor White
+    Write-Host "  • Path traversal prevention" -ForegroundColor White
+    Write-Host "  • Rate limiting & audit logging" -ForegroundColor White
     Write-Host ""
-    Write-Host "  NO WARRANTY:" -ForegroundColor Red
-    Write-Host "  - This tool is provided AS-IS without any warranties" -ForegroundColor Yellow
-    Write-Host "  - Author accepts NO LIABILITY for any data loss or issues" -ForegroundColor Yellow
-    Write-Host "  - Always backup important data before any file operations" -ForegroundColor Yellow
-    Write-Host "  - Use at own risk" -ForegroundColor Yellow
-    Write-Host ""
-    Write-Host "  BY USING THIS TOOL, YOU ACKNOWLEDGE AND ACCEPT FULL RESPONSIBILITY." -ForegroundColor Red
+    Write-Host "  BY PROCEEDING, YOU:" -ForegroundColor Red
+    Write-Host "  • Acknowledge this is experimental software" -ForegroundColor Yellow
+    Write-Host "  • Accept full responsibility for any consequences" -ForegroundColor Yellow
+    Write-Host "  • Confirm you have backed up important data" -ForegroundColor Yellow
     Write-Host ""
     Write-Host "===============================================================================" -ForegroundColor Yellow
     Write-Host ""
