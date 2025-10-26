@@ -1,0 +1,21 @@
+# Log files
+logs/
+*.log
+
+# Config files (user-specific)
+config/settings.json
+config/resume.json
+
+# Temp files
+temp/
+*.tmp
+
+# Verification cache
+verification/
+
+# Windows
+Thumbs.db
+desktop.ini
+
+# PowerShell
+*.ps1~

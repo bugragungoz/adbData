@@ -1,0 +1,88 @@
+{
+    "presets":  [
+                    {
+                        "id":  "camera_photos",
+                        "name":  "[CAMERA] Photos",
+                        "description":  "Transfer all photos from camera",
+                        "source_paths":  [
+                                             "/sdcard/DCIM/Camera/"
+                                         ],
+                        "destination":  "Pictures/Phone Camera/{date}/",
+                        "filters":  {
+                                        "extensions":  [
+                                                           ".jpg",
+                                                           ".jpeg",
+                                                           ".png",
+                                                           ".heic",
+                                                           ".dng"
+                                                       ]
+                                    },
+                        "options":  {
+                                        "recursive":  false,
+                                        "verify":  true,
+                                        "organize_by":  "date"
+                                    }
+                    },
+                    {
+                        "id":  "camera_videos",
+                        "name":  "[VIDEO] Camera Videos",
+                        "description":  "Transfer videos from camera",
+                        "source_paths":  [
+                                             "/sdcard/DCIM/Camera/"
+                                         ],
+                        "destination":  "Videos/Phone Camera/{date}/",
+                        "filters":  {
+                                        "extensions":  [
+                                                           ".mp4",
+                                                           ".mov",
+                                                           ".avi",
+                                                           ".3gp"
+                                                       ]
+                                    },
+                        "options":  {
+                                        "recursive":  false,
+                                        "verify":  true
+                                    }
+                    },
+                    {
+                        "id":  "whatsapp_media",
+                        "name":  "[WHATSAPP] Media",
+                        "description":  "Backup WhatsApp photos and videos",
+                        "source_paths":  [
+                                             "/sdcard/WhatsApp/Media/"
+                                         ],
+                        "destination":  "Backups/WhatsApp/{date}/",
+                        "options":  {
+                                        "recursive":  true,
+                                        "verify":  true
+                                    }
+                    },
+                    {
+                        "id":  "screenshots",
+                        "name":  "[SCREEN] Screenshots",
+                        "description":  "Transfer all screenshots",
+                        "source_paths":  [
+                                             "/sdcard/Pictures/Screenshots/",
+                                             "/sdcard/Screenshots/"
+                                         ],
+                        "destination":  "Pictures/Screenshots/{date}/",
+                        "options":  {
+                                        "recursive":  false,
+                                        "verify":  true
+                                    }
+                    },
+                    {
+                        "id":  "downloads",
+                        "name":  "[DOWNLOAD] Files",
+                        "description":  "Transfer downloaded files",
+                        "source_paths":  [
+                                             "/sdcard/Download/"
+                                         ],
+                        "destination":  "Downloads/Phone/",
+                        "options":  {
+                                        "recursive":  false,
+                                        "verify":  true
+                                    }
+                    }
+                ]
+}
