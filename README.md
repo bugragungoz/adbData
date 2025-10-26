@@ -7,6 +7,11 @@ High-performance Android file transfer via ADB with cryptographic integrity veri
 ![PowerShell](https://img.shields.io/badge/PowerShell-5.1%2B-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 
+> **⚠️ DISCLAIMER**  
+> This software is provided as-is without any warranty. It has **not been extensively tested** in production environments.  
+> Use at your own risk. The author is not responsible for any data loss, corruption, or damage.  
+> Always backup your data before performing any file transfer operations.
+
 ## Overview
 
 ADB-based file transfer utility addressing MTP protocol limitations (connection instability, data corruption, performance degradation). Implements cryptographic hash verification, atomic operations, and comprehensive security controls.
@@ -29,7 +34,7 @@ ADB-based file transfer utility addressing MTP protocol limitations (connection 
 
 ```powershell
 # Clone repository
-git clone https://github.com/yourusername/adbData.git
+git clone https://github.com/bugragungoz/adbData.git
 cd adbData
 
 # Execute main script
