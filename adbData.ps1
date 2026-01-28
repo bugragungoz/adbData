@@ -774,24 +774,22 @@ function Get-SafeRelativePath {
         $relative = $FullPath.Replace($BasePath, "").TrimStart('/', '\')
     }
     
-    # Block path traversal patterns
+    # Block path traversal patterns using literal string matching (not regex)
+    # This prevents false positives like "on/" matching "../" as regex
     $traversalPatterns = @(
-        '\.\.',           # Standard ..
+        '..',             # Standard ..
         '%2e%2e',         # URL encoded ..
         '%252e%252e',     # Double URL encoded ..
-        '\.\.\\',         # Windows style
-        '\.\.\/',         # Unix style
-        '\.\.\.',         # Triple dot (rare but possible)
-        '..\\',           # Windows variant
-        '../',            # Unix variant
-        '...\\',          # Fuzzing variant
-        '.../'            # Fuzzing variant
+        '...',            # Triple dot (rare but possible)
+        '..\',            # Windows variant
+        '../'             # Unix variant
     )
     
     foreach ($pattern in $traversalPatterns) {
-        if ($relative -match $pattern) {
-            Write-Log "Path traversal pattern detected: $pattern in $relative" -Level ERROR
-            $relative = $relative -replace $pattern, ''
+        # Use literal string Contains() instead of regex -match
+        if ($relative.Contains($pattern)) {
+            Write-Log "Path traversal pattern detected: $pattern in $relative" -Level WARNING
+            $relative = $relative.Replace($pattern, '')
         }
     }
     
@@ -2074,17 +2072,45 @@ function Get-AndroidFileSize {
     )
     
     try {
-        # Sanitize path to prevent command injection
-        if ($script:Config.SanitizePaths) {
-            $FilePath = Protect-ShellPath -Path $FilePath
+        # Escape single quotes in path for shell command
+        $escapedPath = $FilePath -replace "'", "'\\''"
+        
+        # Try stat command first (most reliable)
+        $size = & $script:ADB -s $DeviceID shell "stat -c%s '$escapedPath'" 2>&1
+        $sizeStr = ($size | Out-String).Trim()
+        
+        # Check if stat returned a valid number
+        if ($sizeStr -match '^\d+$') {
+            return [long]$sizeStr
         }
         
-        $size = & $script:ADB -s $DeviceID shell "stat -c%s '$FilePath'" 2>&1
-        return [long]$size.Trim()
+        # Fallback: Try ls -l and parse size
+        Write-Log "stat failed for $FilePath, trying ls -l" -Level DEBUG
+        $lsOutput = & $script:ADB -s $DeviceID shell "ls -l '$escapedPath'" 2>&1
+        $lsStr = ($lsOutput | Out-String).Trim()
+        
+        # ls -l output format: -rw-r--r-- 1 user group SIZE date time filename
+        # Size is typically the 5th field
+        $parts = $lsStr -split '\s+'
+        if ($parts.Count -ge 5 -and $parts[4] -match '^\d+$') {
+            return [long]$parts[4]
+        }
+        
+        # Fallback: Try wc -c
+        Write-Log "ls -l failed for $FilePath, trying wc -c" -Level DEBUG
+        $wcOutput = & $script:ADB -s $DeviceID shell "wc -c < '$escapedPath'" 2>&1
+        $wcStr = ($wcOutput | Out-String).Trim()
+        
+        if ($wcStr -match '^\d+$') {
+            return [long]$wcStr
+        }
+        
+        Write-Log "All file size methods failed for $FilePath" -Level WARNING
+        return -1  # Return -1 to indicate unknown size (different from 0)
     }
     catch {
-        Write-Log "Failed to get file size for $FilePath" -Level ERROR
-        return 0
+        Write-Log "Failed to get file size for $FilePath - $($_.Exception.Message)" -Level ERROR
+        return -1
     }
 }
 
@@ -2332,17 +2358,27 @@ function Test-FileIntegrity {
     $sourceSize = Get-AndroidFileSize -DeviceID $DeviceID -FilePath $SourcePath
     $destSize = (Get-Item $DestinationPath).Length
     
-    if ($sourceSize -ne $destSize) {
+    # If source size is unknown (-1), skip size comparison but still verify hash
+    if ($sourceSize -eq -1) {
+        Write-Log "Source file size unknown, skipping size check for: $SourcePath" -Level WARNING
+        # Fall through to hash verification if file is large enough
+        if ($destSize -lt $script:Config.SmallFileThreshold) {
+            Write-Log "Small destination file ($([math]::Round($destSize/1MB, 2))MB) - assuming transfer OK" -Level DEBUG
+            return $true
+        }
+    }
+    elseif ($sourceSize -ne $destSize) {
         Write-Log "Size mismatch: Source=$sourceSize, Dest=$destSize" -Level ERROR
         return $false
     }
-    
-    # Performance optimization: Skip hash for small files
-    # Rationale: Files under threshold have very low corruption risk,
-    # and hash calculation overhead outweighs the benefit
-    if ($sourceSize -lt $script:Config.SmallFileThreshold) {
-        Write-Log "Small file ($([math]::Round($sourceSize/1MB, 2))MB) - size check sufficient" -Level DEBUG
-        return $true
+    else {
+        # Performance optimization: Skip hash for small files when sizes match
+        # Rationale: Files under threshold have very low corruption risk,
+        # and hash calculation overhead outweighs the benefit
+        if ($sourceSize -lt $script:Config.SmallFileThreshold) {
+            Write-Log "Small file ($([math]::Round($sourceSize/1MB, 2))MB) - size check sufficient" -Level DEBUG
+            return $true
+        }
     }
     
     # Hash verification (slower but thorough)
@@ -2441,7 +2477,12 @@ function Copy-AndroidFile {
             $sourceSize = Get-AndroidFileSize -DeviceID $DeviceID -FilePath $SourcePath
             $destSize = (Get-Item $DestinationPath).Length
             
-            if ($sourceSize -eq $destSize) {
+            # If source size is unknown (-1), we cannot reliably skip - re-transfer to be safe
+            if ($sourceSize -eq -1) {
+                Write-Log "Source file size unknown, re-transferring: $(Split-Path $SourcePath -Leaf)" -Level WARNING
+                Remove-Item $DestinationPath -Force -ErrorAction SilentlyContinue
+            }
+            elseif ($sourceSize -eq $destSize) {
                 # Optional: Verify hash if enabled
                 if ($Verify -and $script:Config.AlwaysVerifyHash) {
                     Write-Log "File exists, verifying hash: $(Split-Path $SourcePath -Leaf)" -Level DEBUG
