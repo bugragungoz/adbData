@@ -1826,42 +1826,47 @@ function Get-ADBDevices {
     <#
     .SYNOPSIS
         Gets list of connected Android devices
+    .OUTPUTS
+        PSCustomObject[] - Array of device objects
     #>
+    [CmdletBinding()]
+    [OutputType([PSCustomObject[]])]
+    param()
     
     if (-not $script:ADB) {
         Write-Log "ADB not initialized" -Level ERROR
-        return @()
+        return ,@()
     }
     
     try {
         # Start ADB server if not running
-        & $script:ADB start-server 2>&1 | Out-Null
+        $null = & $script:ADB start-server 2>&1
         Start-Sleep -Milliseconds $script:Config.ADBStartupDelay
         
         $rawOutput = & $script:ADB devices -l 2>&1
         
         if ($LASTEXITCODE -ne 0) {
             Write-Log "ADB devices command failed" -Level ERROR
-            return @()
+            return ,@()
         }
         
-        # Convert output to string if it's an array (PowerShell returns array of lines)
-        if ($rawOutput -is [System.Array]) {
-            $output = $rawOutput -join "`n"
-        }
-        else {
-            $output = [string]$rawOutput
+        # Convert output to string - handle both array and string output
+        $output = if ($rawOutput -is [System.Array]) {
+            $rawOutput -join "`n"
+        } else {
+            [string]$rawOutput
         }
         
         Write-Log "ADB devices raw output: $output" -Level DEBUG
         
-        $devices = @()
+        # Use ArrayList for better performance and predictable behavior
+        $deviceList = [System.Collections.ArrayList]::new()
         
         # Handle both Windows (CRLF) and Unix (LF) line endings
         $lines = $output -split '\r?\n'
         
         # Skip the header line "List of devices attached"
-        $deviceLines = @()
+        $deviceLines = [System.Collections.ArrayList]::new()
         $foundHeader = $false
         foreach ($line in $lines) {
             if ($line -match '^List of devices attached') {
@@ -1869,25 +1874,28 @@ function Get-ADBDevices {
                 continue
             }
             if ($foundHeader) {
-                $deviceLines += $line
+                [void]$deviceLines.Add($line)
             }
         }
         
         # If no header found, try skipping first line anyway (fallback)
         if (-not $foundHeader -and $lines.Count -gt 1) {
             Write-Log "ADB devices header not found, using fallback parsing" -Level DEBUG
-            $deviceLines = $lines | Select-Object -Skip 1
+            $deviceLines = [System.Collections.ArrayList]::new()
+            for ($i = 1; $i -lt $lines.Count; $i++) {
+                [void]$deviceLines.Add($lines[$i])
+            }
         }
         
         Write-Log "Found $($deviceLines.Count) potential device lines" -Level DEBUG
         
         foreach ($line in $deviceLines) {
-            $line = $line.Trim()
-            if ([string]::IsNullOrWhiteSpace($line)) { continue }
+            $trimmedLine = $line.Trim()
+            if ([string]::IsNullOrWhiteSpace($trimmedLine)) { continue }
             
-            Write-Log "Processing device line: $line" -Level DEBUG
+            Write-Log "Processing device line: $trimmedLine" -Level DEBUG
             
-            $parts = $line -split '\s+'
+            $parts = $trimmedLine -split '\s+'
             if ($parts.Count -lt 2) { 
                 Write-Log "Skipping line - insufficient parts: $($parts.Count)" -Level DEBUG
                 continue 
@@ -1904,8 +1912,8 @@ function Get-ADBDevices {
             $product = "Unknown"
             $transport = "USB"
             
-            if ($line -match "model:([^\s]+)") { $model = $matches[1] }
-            if ($line -match "product:([^\s]+)") { $product = $matches[1] }
+            if ($trimmedLine -match "model:([^\s]+)") { $model = $matches[1] }
+            if ($trimmedLine -match "product:([^\s]+)") { $product = $matches[1] }
             if ($deviceID -match ":") { $transport = "WiFi" }
             
             $device = [PSCustomObject]@{
@@ -1918,16 +1926,17 @@ function Get-ADBDevices {
             
             Write-Log "Found device: ID=$deviceID, State=$state, Model=$model" -Level DEBUG
             
-            $devices += $device
+            [void]$deviceList.Add($device)
         }
         
-        Write-Log "Total devices found: $($devices.Count)" -Level INFO
+        Write-Log "Total devices found: $($deviceList.Count)" -Level INFO
         
-        return $devices
+        # Return as array - comma operator ensures array is not unwrapped
+        return ,@($deviceList.ToArray())
     }
     catch {
         Write-Log "Error getting ADB devices: $($_.Exception.Message)" -Level ERROR
-        return @()
+        return ,@()
     }
 }
 
@@ -3158,24 +3167,35 @@ function Show-DeviceSelection {
     Write-Host "  Scanning for devices..." -ForegroundColor Gray
     
     # Try multiple times in case ADB server needs restart
-    $devices = @()
+    $devices = $null
     $maxRetries = 3
     
     for ($retry = 1; $retry -le $maxRetries; $retry++) {
-        $devices = Get-ADBDevices
+        # Get devices and ensure it's always an array
+        $result = Get-ADBDevices
+        $devices = @($result)
         
-        if ($devices.Count -gt 0) {
+        # Debug: Show what we received
+        Write-Log "Device scan attempt $retry - Received type: $($result.GetType().Name), Count: $($devices.Count)" -Level DEBUG
+        
+        if ($null -ne $devices -and $devices.Count -gt 0) {
+            Write-Log "Found $($devices.Count) device(s) on attempt $retry" -Level INFO
             break
         }
         
         if ($retry -lt $maxRetries) {
             Write-Host "  Retry $retry/$maxRetries - Restarting ADB server..." -ForegroundColor Yellow
             # Kill and restart ADB server
-            & $script:ADB kill-server 2>&1 | Out-Null
+            $null = & $script:ADB kill-server 2>&1
             Start-Sleep -Milliseconds 500
-            & $script:ADB start-server 2>&1 | Out-Null
+            $null = & $script:ADB start-server 2>&1
             Start-Sleep -Milliseconds 1000
         }
+    }
+    
+    # Final safety check - ensure devices is an array
+    if ($null -eq $devices) {
+        $devices = @()
     }
     
     if ($devices.Count -eq 0) {
