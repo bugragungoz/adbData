@@ -1221,7 +1221,13 @@ function Write-Log {
         }
         
         # Write to console (with enhanced formatting)
-    if (-not $NoConsole) {
+        # Skip DEBUG messages unless EnableDebugMode is set
+        $showOnConsole = -not $NoConsole
+        if ($Level -eq 'DEBUG' -and $script:Config -and -not $script:Config.EnableDebugMode) {
+            $showOnConsole = $false
+        }
+        
+    if ($showOnConsole) {
         $color = switch ($Level) {
                 'SUCCESS'  { 'Green' }
                 'WARNING'  { 'Yellow' }
@@ -1832,25 +1838,66 @@ function Get-ADBDevices {
         & $script:ADB start-server 2>&1 | Out-Null
         Start-Sleep -Milliseconds $script:Config.ADBStartupDelay
         
-        $output = & $script:ADB devices -l 2>&1
+        $rawOutput = & $script:ADB devices -l 2>&1
         
         if ($LASTEXITCODE -ne 0) {
             Write-Log "ADB devices command failed" -Level ERROR
             return @()
         }
         
-        $devices = @()
-        $lines = $output -split "`n" | Select-Object -Skip 1
+        # Convert output to string if it's an array (PowerShell returns array of lines)
+        if ($rawOutput -is [System.Array]) {
+            $output = $rawOutput -join "`n"
+        }
+        else {
+            $output = [string]$rawOutput
+        }
         
+        Write-Log "ADB devices raw output: $output" -Level DEBUG
+        
+        $devices = @()
+        
+        # Handle both Windows (CRLF) and Unix (LF) line endings
+        $lines = $output -split '\r?\n'
+        
+        # Skip the header line "List of devices attached"
+        $deviceLines = @()
+        $foundHeader = $false
         foreach ($line in $lines) {
+            if ($line -match '^List of devices attached') {
+                $foundHeader = $true
+                continue
+            }
+            if ($foundHeader) {
+                $deviceLines += $line
+            }
+        }
+        
+        # If no header found, try skipping first line anyway (fallback)
+        if (-not $foundHeader -and $lines.Count -gt 1) {
+            Write-Log "ADB devices header not found, using fallback parsing" -Level DEBUG
+            $deviceLines = $lines | Select-Object -Skip 1
+        }
+        
+        Write-Log "Found $($deviceLines.Count) potential device lines" -Level DEBUG
+        
+        foreach ($line in $deviceLines) {
             $line = $line.Trim()
             if ([string]::IsNullOrWhiteSpace($line)) { continue }
             
+            Write-Log "Processing device line: $line" -Level DEBUG
+            
             $parts = $line -split '\s+'
-            if ($parts.Count -lt 2) { continue }
+            if ($parts.Count -lt 2) { 
+                Write-Log "Skipping line - insufficient parts: $($parts.Count)" -Level DEBUG
+                continue 
+            }
             
             $deviceID = $parts[0]
             $state = $parts[1]
+            
+            # Skip if deviceID looks invalid
+            if ([string]::IsNullOrWhiteSpace($deviceID)) { continue }
             
             # Parse additional info
             $model = "Unknown"
@@ -1869,8 +1916,12 @@ function Get-ADBDevices {
                 Transport = $transport
             }
             
+            Write-Log "Found device: ID=$deviceID, State=$state, Model=$model" -Level DEBUG
+            
             $devices += $device
         }
+        
+        Write-Log "Total devices found: $($devices.Count)" -Level INFO
         
         return $devices
     }
@@ -3104,16 +3155,47 @@ function Show-DeviceSelection {
     Write-Host "  ===============================================================" -ForegroundColor Cyan
     Write-Host ""
     
-    $devices = Get-ADBDevices
+    Write-Host "  Scanning for devices..." -ForegroundColor Gray
+    
+    # Try multiple times in case ADB server needs restart
+    $devices = @()
+    $maxRetries = 3
+    
+    for ($retry = 1; $retry -le $maxRetries; $retry++) {
+        $devices = Get-ADBDevices
+        
+        if ($devices.Count -gt 0) {
+            break
+        }
+        
+        if ($retry -lt $maxRetries) {
+            Write-Host "  Retry $retry/$maxRetries - Restarting ADB server..." -ForegroundColor Yellow
+            # Kill and restart ADB server
+            & $script:ADB kill-server 2>&1 | Out-Null
+            Start-Sleep -Milliseconds 500
+            & $script:ADB start-server 2>&1 | Out-Null
+            Start-Sleep -Milliseconds 1000
+        }
+    }
     
     if ($devices.Count -eq 0) {
         Write-Host "  [!] No devices found!" -ForegroundColor Red
         Write-Host ""
+        
+        # Show raw ADB output for debugging
+        Write-Host "  Diagnostic Information:" -ForegroundColor Yellow
+        Write-Host "  -----------------------" -ForegroundColor Yellow
+        
+        $rawDiag = & $script:ADB devices -l 2>&1
+        Write-Host "  ADB Output: $rawDiag" -ForegroundColor Gray
+        Write-Host ""
+        
         Write-Host "  Verify the following:" -ForegroundColor Yellow
         Write-Host "   * Is device connected via USB?" -ForegroundColor Gray
         Write-Host "   * Is USB Debugging enabled?" -ForegroundColor Gray
         Write-Host "   * Is 'Allow USB debugging' authorized on device?" -ForegroundColor Gray
-        Write-Host "   * Is USB cable working?" -ForegroundColor Gray
+        Write-Host "   * Is USB cable working (try a different cable/port)?" -ForegroundColor Gray
+        Write-Host "   * Run 'adb kill-server' then 'adb start-server' manually" -ForegroundColor Gray
         Write-Host ""
         Write-Host "  [Press any key]" -ForegroundColor Yellow
         $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
