@@ -2589,9 +2589,14 @@ function Copy-AndroidFile {
                         return $true
                     }
                     
-                    # Perform atomic move with .NET (more reliable than PowerShell)
-                    # $false = no overwrite (throws if exists)
-                    [System.IO.File]::Move($tempPath, $DestinationPath, $false)
+                    # Perform atomic move
+                    # Note: File.Move(src, dst, overwrite) is only available in .NET Core 3.0+
+                    # For compatibility with Windows PowerShell (.NET Framework), use 2-arg version
+                    if (Test-Path $DestinationPath) {
+                        # This should not happen due to earlier check, but handle it anyway
+                        Remove-Item $DestinationPath -Force -ErrorAction Stop
+                    }
+                    [System.IO.File]::Move($tempPath, $DestinationPath)
                     
                     Write-Log "Atomic move completed: $DestinationPath" -Level DEBUG
             }
