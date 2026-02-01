@@ -774,24 +774,22 @@ function Get-SafeRelativePath {
         $relative = $FullPath.Replace($BasePath, "").TrimStart('/', '\')
     }
     
-    # Block path traversal patterns
+    # Block path traversal patterns using literal string matching (not regex)
+    # This prevents false positives like "on/" matching "../" as regex
     $traversalPatterns = @(
-        '\.\.',           # Standard ..
+        '..',             # Standard ..
         '%2e%2e',         # URL encoded ..
         '%252e%252e',     # Double URL encoded ..
-        '\.\.\\',         # Windows style
-        '\.\.\/',         # Unix style
-        '\.\.\.',         # Triple dot (rare but possible)
-        '..\\',           # Windows variant
-        '../',            # Unix variant
-        '...\\',          # Fuzzing variant
-        '.../'            # Fuzzing variant
+        '...',            # Triple dot (rare but possible)
+        '..\',            # Windows variant
+        '../'             # Unix variant
     )
     
     foreach ($pattern in $traversalPatterns) {
-        if ($relative -match $pattern) {
-            Write-Log "Path traversal pattern detected: $pattern in $relative" -Level ERROR
-            $relative = $relative -replace $pattern, ''
+        # Use literal string Contains() instead of regex -match
+        if ($relative.Contains($pattern)) {
+            Write-Log "Path traversal pattern detected: $pattern in $relative" -Level WARNING
+            $relative = $relative.Replace($pattern, '')
         }
     }
     
@@ -1221,7 +1219,13 @@ function Write-Log {
         }
         
         # Write to console (with enhanced formatting)
-    if (-not $NoConsole) {
+        # Skip DEBUG messages unless EnableDebugMode is set
+        $showOnConsole = -not $NoConsole
+        if ($Level -eq 'DEBUG' -and $script:Config -and -not $script:Config.EnableDebugMode) {
+            $showOnConsole = $false
+        }
+        
+    if ($showOnConsole) {
         $color = switch ($Level) {
                 'SUCCESS'  { 'Green' }
                 'WARNING'  { 'Yellow' }
@@ -1820,45 +1824,94 @@ function Get-ADBDevices {
     <#
     .SYNOPSIS
         Gets list of connected Android devices
+    .OUTPUTS
+        PSCustomObject[] - Array of device objects
     #>
+    [CmdletBinding()]
+    [OutputType([PSCustomObject[]])]
+    param()
     
     if (-not $script:ADB) {
         Write-Log "ADB not initialized" -Level ERROR
-        return @()
+        return ,@()
     }
     
     try {
         # Start ADB server if not running
-        & $script:ADB start-server 2>&1 | Out-Null
+        $null = & $script:ADB start-server 2>&1
         Start-Sleep -Milliseconds $script:Config.ADBStartupDelay
         
-        $output = & $script:ADB devices -l 2>&1
+        $rawOutput = & $script:ADB devices -l 2>&1
         
         if ($LASTEXITCODE -ne 0) {
             Write-Log "ADB devices command failed" -Level ERROR
-            return @()
+            return ,@()
         }
         
-        $devices = @()
-        $lines = $output -split "`n" | Select-Object -Skip 1
+        # Convert output to string - handle both array and string output
+        $output = if ($rawOutput -is [System.Array]) {
+            $rawOutput -join "`n"
+        } else {
+            [string]$rawOutput
+        }
         
+        Write-Log "ADB devices raw output: $output" -Level DEBUG
+        
+        # Use ArrayList for better performance and predictable behavior
+        $deviceList = [System.Collections.ArrayList]::new()
+        
+        # Handle both Windows (CRLF) and Unix (LF) line endings
+        $lines = $output -split '\r?\n'
+        
+        # Skip the header line "List of devices attached"
+        $deviceLines = [System.Collections.ArrayList]::new()
+        $foundHeader = $false
         foreach ($line in $lines) {
-            $line = $line.Trim()
-            if ([string]::IsNullOrWhiteSpace($line)) { continue }
+            if ($line -match '^List of devices attached') {
+                $foundHeader = $true
+                continue
+            }
+            if ($foundHeader) {
+                [void]$deviceLines.Add($line)
+            }
+        }
+        
+        # If no header found, try skipping first line anyway (fallback)
+        if (-not $foundHeader -and $lines.Count -gt 1) {
+            Write-Log "ADB devices header not found, using fallback parsing" -Level DEBUG
+            $deviceLines = [System.Collections.ArrayList]::new()
+            for ($i = 1; $i -lt $lines.Count; $i++) {
+                [void]$deviceLines.Add($lines[$i])
+            }
+        }
+        
+        Write-Log "Found $($deviceLines.Count) potential device lines" -Level DEBUG
+        
+        foreach ($line in $deviceLines) {
+            $trimmedLine = $line.Trim()
+            if ([string]::IsNullOrWhiteSpace($trimmedLine)) { continue }
             
-            $parts = $line -split '\s+'
-            if ($parts.Count -lt 2) { continue }
+            Write-Log "Processing device line: $trimmedLine" -Level DEBUG
+            
+            $parts = $trimmedLine -split '\s+'
+            if ($parts.Count -lt 2) { 
+                Write-Log "Skipping line - insufficient parts: $($parts.Count)" -Level DEBUG
+                continue 
+            }
             
             $deviceID = $parts[0]
             $state = $parts[1]
+            
+            # Skip if deviceID looks invalid
+            if ([string]::IsNullOrWhiteSpace($deviceID)) { continue }
             
             # Parse additional info
             $model = "Unknown"
             $product = "Unknown"
             $transport = "USB"
             
-            if ($line -match "model:([^\s]+)") { $model = $matches[1] }
-            if ($line -match "product:([^\s]+)") { $product = $matches[1] }
+            if ($trimmedLine -match "model:([^\s]+)") { $model = $matches[1] }
+            if ($trimmedLine -match "product:([^\s]+)") { $product = $matches[1] }
             if ($deviceID -match ":") { $transport = "WiFi" }
             
             $device = [PSCustomObject]@{
@@ -1869,14 +1922,19 @@ function Get-ADBDevices {
                 Transport = $transport
             }
             
-            $devices += $device
+            Write-Log "Found device: ID=$deviceID, State=$state, Model=$model" -Level DEBUG
+            
+            [void]$deviceList.Add($device)
         }
         
-        return $devices
+        Write-Log "Total devices found: $($deviceList.Count)" -Level INFO
+        
+        # Return as array - comma operator ensures array is not unwrapped
+        return ,@($deviceList.ToArray())
     }
     catch {
         Write-Log "Error getting ADB devices: $($_.Exception.Message)" -Level ERROR
-        return @()
+        return ,@()
     }
 }
 
@@ -2014,17 +2072,45 @@ function Get-AndroidFileSize {
     )
     
     try {
-        # Sanitize path to prevent command injection
-        if ($script:Config.SanitizePaths) {
-            $FilePath = Protect-ShellPath -Path $FilePath
+        # Escape single quotes in path for shell command
+        $escapedPath = $FilePath -replace "'", "'\\''"
+        
+        # Try stat command first (most reliable)
+        $size = & $script:ADB -s $DeviceID shell "stat -c%s '$escapedPath'" 2>&1
+        $sizeStr = ($size | Out-String).Trim()
+        
+        # Check if stat returned a valid number
+        if ($sizeStr -match '^\d+$') {
+            return [long]$sizeStr
         }
         
-        $size = & $script:ADB -s $DeviceID shell "stat -c%s '$FilePath'" 2>&1
-        return [long]$size.Trim()
+        # Fallback: Try ls -l and parse size
+        Write-Log "stat failed for $FilePath, trying ls -l" -Level DEBUG
+        $lsOutput = & $script:ADB -s $DeviceID shell "ls -l '$escapedPath'" 2>&1
+        $lsStr = ($lsOutput | Out-String).Trim()
+        
+        # ls -l output format: -rw-r--r-- 1 user group SIZE date time filename
+        # Size is typically the 5th field
+        $parts = $lsStr -split '\s+'
+        if ($parts.Count -ge 5 -and $parts[4] -match '^\d+$') {
+            return [long]$parts[4]
+        }
+        
+        # Fallback: Try wc -c
+        Write-Log "ls -l failed for $FilePath, trying wc -c" -Level DEBUG
+        $wcOutput = & $script:ADB -s $DeviceID shell "wc -c < '$escapedPath'" 2>&1
+        $wcStr = ($wcOutput | Out-String).Trim()
+        
+        if ($wcStr -match '^\d+$') {
+            return [long]$wcStr
+        }
+        
+        Write-Log "All file size methods failed for $FilePath" -Level WARNING
+        return -1  # Return -1 to indicate unknown size (different from 0)
     }
     catch {
-        Write-Log "Failed to get file size for $FilePath" -Level ERROR
-        return 0
+        Write-Log "Failed to get file size for $FilePath - $($_.Exception.Message)" -Level ERROR
+        return -1
     }
 }
 
@@ -2272,17 +2358,27 @@ function Test-FileIntegrity {
     $sourceSize = Get-AndroidFileSize -DeviceID $DeviceID -FilePath $SourcePath
     $destSize = (Get-Item $DestinationPath).Length
     
-    if ($sourceSize -ne $destSize) {
+    # If source size is unknown (-1), skip size comparison but still verify hash
+    if ($sourceSize -eq -1) {
+        Write-Log "Source file size unknown, skipping size check for: $SourcePath" -Level WARNING
+        # Fall through to hash verification if file is large enough
+        if ($destSize -lt $script:Config.SmallFileThreshold) {
+            Write-Log "Small destination file ($([math]::Round($destSize/1MB, 2))MB) - assuming transfer OK" -Level DEBUG
+            return $true
+        }
+    }
+    elseif ($sourceSize -ne $destSize) {
         Write-Log "Size mismatch: Source=$sourceSize, Dest=$destSize" -Level ERROR
         return $false
     }
-    
-    # Performance optimization: Skip hash for small files
-    # Rationale: Files under threshold have very low corruption risk,
-    # and hash calculation overhead outweighs the benefit
-    if ($sourceSize -lt $script:Config.SmallFileThreshold) {
-        Write-Log "Small file ($([math]::Round($sourceSize/1MB, 2))MB) - size check sufficient" -Level DEBUG
-        return $true
+    else {
+        # Performance optimization: Skip hash for small files when sizes match
+        # Rationale: Files under threshold have very low corruption risk,
+        # and hash calculation overhead outweighs the benefit
+        if ($sourceSize -lt $script:Config.SmallFileThreshold) {
+            Write-Log "Small file ($([math]::Round($sourceSize/1MB, 2))MB) - size check sufficient" -Level DEBUG
+            return $true
+        }
     }
     
     # Hash verification (slower but thorough)
@@ -2381,7 +2477,12 @@ function Copy-AndroidFile {
             $sourceSize = Get-AndroidFileSize -DeviceID $DeviceID -FilePath $SourcePath
             $destSize = (Get-Item $DestinationPath).Length
             
-            if ($sourceSize -eq $destSize) {
+            # If source size is unknown (-1), we cannot reliably skip - re-transfer to be safe
+            if ($sourceSize -eq -1) {
+                Write-Log "Source file size unknown, re-transferring: $(Split-Path $SourcePath -Leaf)" -Level WARNING
+                Remove-Item $DestinationPath -Force -ErrorAction SilentlyContinue
+            }
+            elseif ($sourceSize -eq $destSize) {
                 # Optional: Verify hash if enabled
                 if ($Verify -and $script:Config.AlwaysVerifyHash) {
                     Write-Log "File exists, verifying hash: $(Split-Path $SourcePath -Leaf)" -Level DEBUG
@@ -2488,9 +2589,14 @@ function Copy-AndroidFile {
                         return $true
                     }
                     
-                    # Perform atomic move with .NET (more reliable than PowerShell)
-                    # $false = no overwrite (throws if exists)
-                    [System.IO.File]::Move($tempPath, $DestinationPath, $false)
+                    # Perform atomic move
+                    # Note: File.Move(src, dst, overwrite) is only available in .NET Core 3.0+
+                    # For compatibility with Windows PowerShell (.NET Framework), use 2-arg version
+                    if (Test-Path $DestinationPath) {
+                        # This should not happen due to earlier check, but handle it anyway
+                        Remove-Item $DestinationPath -Force -ErrorAction Stop
+                    }
+                    [System.IO.File]::Move($tempPath, $DestinationPath)
                     
                     Write-Log "Atomic move completed: $DestinationPath" -Level DEBUG
             }
@@ -3104,16 +3210,58 @@ function Show-DeviceSelection {
     Write-Host "  ===============================================================" -ForegroundColor Cyan
     Write-Host ""
     
-    $devices = Get-ADBDevices
+    Write-Host "  Scanning for devices..." -ForegroundColor Gray
+    
+    # Try multiple times in case ADB server needs restart
+    $devices = $null
+    $maxRetries = 3
+    
+    for ($retry = 1; $retry -le $maxRetries; $retry++) {
+        # Get devices and ensure it's always an array
+        $result = Get-ADBDevices
+        $devices = @($result)
+        
+        # Debug: Show what we received
+        Write-Log "Device scan attempt $retry - Received type: $($result.GetType().Name), Count: $($devices.Count)" -Level DEBUG
+        
+        if ($null -ne $devices -and $devices.Count -gt 0) {
+            Write-Log "Found $($devices.Count) device(s) on attempt $retry" -Level INFO
+            break
+        }
+        
+        if ($retry -lt $maxRetries) {
+            Write-Host "  Retry $retry/$maxRetries - Restarting ADB server..." -ForegroundColor Yellow
+            # Kill and restart ADB server
+            $null = & $script:ADB kill-server 2>&1
+            Start-Sleep -Milliseconds 500
+            $null = & $script:ADB start-server 2>&1
+            Start-Sleep -Milliseconds 1000
+        }
+    }
+    
+    # Final safety check - ensure devices is an array
+    if ($null -eq $devices) {
+        $devices = @()
+    }
     
     if ($devices.Count -eq 0) {
         Write-Host "  [!] No devices found!" -ForegroundColor Red
         Write-Host ""
+        
+        # Show raw ADB output for debugging
+        Write-Host "  Diagnostic Information:" -ForegroundColor Yellow
+        Write-Host "  -----------------------" -ForegroundColor Yellow
+        
+        $rawDiag = & $script:ADB devices -l 2>&1
+        Write-Host "  ADB Output: $rawDiag" -ForegroundColor Gray
+        Write-Host ""
+        
         Write-Host "  Verify the following:" -ForegroundColor Yellow
         Write-Host "   * Is device connected via USB?" -ForegroundColor Gray
         Write-Host "   * Is USB Debugging enabled?" -ForegroundColor Gray
         Write-Host "   * Is 'Allow USB debugging' authorized on device?" -ForegroundColor Gray
-        Write-Host "   * Is USB cable working?" -ForegroundColor Gray
+        Write-Host "   * Is USB cable working (try a different cable/port)?" -ForegroundColor Gray
+        Write-Host "   * Run 'adb kill-server' then 'adb start-server' manually" -ForegroundColor Gray
         Write-Host ""
         Write-Host "  [Press any key]" -ForegroundColor Yellow
         $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
