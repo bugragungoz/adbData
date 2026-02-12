@@ -578,7 +578,9 @@ function Clear-SensitiveData {
         [Parameter(Mandatory=$true)]
         [ref]$Variable,
         
-        [int]$OverwritePasses = 3
+        [int]$OverwritePasses = 3,
+
+        [switch]$ForceGC
     )
     
     try {
@@ -633,10 +635,12 @@ function Clear-SensitiveData {
         # Final nullification
         $Variable.Value = $null
         
-        # Force garbage collection
-        [System.GC]::Collect()
-        [System.GC]::WaitForPendingFinalizers()
-        [System.GC]::Collect()
+        # Force garbage collection if requested
+        if ($ForceGC) {
+            [System.GC]::Collect()
+            [System.GC]::WaitForPendingFinalizers()
+            [System.GC]::Collect()
+        }
         
         Write-Log "Sensitive data securely cleared from memory" -Level DEBUG
     }
@@ -872,6 +876,13 @@ function Test-ConfigValue {
     if ($Config.RetryDelaySeconds -lt 1 -or $Config.RetryDelaySeconds -gt 60) {
         Write-Log "Invalid RetryDelaySeconds: $($Config.RetryDelaySeconds), using default" -Level WARNING
         $Config.RetryDelaySeconds = 5
+        $isValid = $false
+    }
+
+    # Validate GCInterval
+    if ($null -eq $Config.GCInterval -or $Config.GCInterval -lt 1) {
+        Write-Log "Invalid GCInterval value: $($Config.GCInterval), using default" -Level WARNING
+        $Config.GCInterval = 1000
         $isValid = $false
     }
     
@@ -1457,6 +1468,11 @@ function Initialize-Config {
                 $typeValid = $false
             }
             
+            if ($loadedConfig.GCInterval -and ($loadedConfig.GCInterval -isnot [int] -and $loadedConfig.GCInterval -isnot [long])) {
+                Write-Log "Type mismatch: GCInterval must be integer" -Level WARNING
+                $typeValid = $false
+            }
+
             if (-not $typeValid) {
                 Write-Log "Type validation failed. Using default configuration." -Level ERROR
                 Initialize-DefaultConfig
@@ -2811,13 +2827,21 @@ function Copy-AndroidDirectory {
             # Transfer large files sequentially
             if ($largeFiles.Count -gt 0) {
                 Write-Host "  [INFO] Transferring $($largeFiles.Count) large files sequentially..." -ForegroundColor Cyan
+                $largeFileNum = 0
                 foreach ($fileInfo in $largeFiles) {
+                    $largeFileNum++
                     $relativePath = Get-SafeRelativePath -FullPath $fileInfo.Path -BasePath $SourcePath
                     $destFile = Join-Path $DestinationPath $relativePath
                     $success = Copy-AndroidFile -DeviceID $DeviceID -SourcePath $fileInfo.Path `
                                                -DestinationPath $destFile -Verify:$Verify
                     if (-not $success) {
                         Write-Log "Failed to transfer: $($fileInfo.Path)" -Level ERROR
+                    }
+
+                    # Periodic garbage collection for large files
+                    if ($largeFileNum % $script:Config.GCInterval -eq 0) {
+                        [System.GC]::Collect()
+                        [System.GC]::WaitForPendingFinalizers()
                     }
                 }
             }
@@ -2836,6 +2860,12 @@ function Copy-AndroidDirectory {
                         if (-not $success) {
                             Write-Log "Failed to transfer: $($fileInfo.Path)" -Level ERROR
                         }
+                    }
+
+                    # Periodic garbage collection for batches
+                    if ($i % $script:Config.GCInterval -eq 0 -and $i -gt 0) {
+                        [System.GC]::Collect()
+                        [System.GC]::WaitForPendingFinalizers()
                     }
                 }
             }
@@ -2861,6 +2891,12 @@ function Copy-AndroidDirectory {
                 
                 if (-not $success) {
                     Write-Log "Failed to transfer: $($fileInfo.Path)" -Level ERROR
+                }
+
+                # Periodic garbage collection to prevent memory pressure during large transfers
+                if ($fileNum % $script:Config.GCInterval -eq 0) {
+                    [System.GC]::Collect()
+                    [System.GC]::WaitForPendingFinalizers()
                 }
             }
         }
