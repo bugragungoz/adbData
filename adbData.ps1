@@ -2529,7 +2529,16 @@ function Copy-AndroidFile {
             
             # Use temporary file for atomic operation
             # Generate cryptographically random filename to prevent prediction
-            $randomStr = -join ((65..90) + (97..122) + (48..57) | Get-Random -Count 12 | ForEach-Object {[char]$_})
+            $rng = [System.Security.Cryptography.RNGCryptoServiceProvider]::new()
+            $bytes = New-Object byte[] 12
+            $rng.GetBytes($bytes)
+            $rng.Dispose()
+            $map = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+            $chars = [char[]]::new(12)
+            for ($i = 0; $i -lt 12; $i++) {
+                $chars[$i] = $map[$bytes[$i] % 62]
+            }
+            $randomStr = [string]::new($chars)
             $tempPath = "$DestinationPath.tmp_$($PID)_$randomStr"
             
             if ($attempt -eq 0) {
