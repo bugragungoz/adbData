@@ -2072,8 +2072,8 @@ function Get-AndroidFileSize {
     )
     
     try {
-        # Escape single quotes in path for shell command
-        $escapedPath = $FilePath -replace "'", "'\\''"
+        # Use centralized path protection for security
+        $escapedPath = Protect-ShellPath -Path $FilePath
         
         # Try stat command first (most reliable)
         $size = & $script:ADB -s $DeviceID shell "stat -c%s '$escapedPath'" 2>&1
