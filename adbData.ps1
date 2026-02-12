@@ -1045,27 +1045,6 @@ function Complete-TransferSession {
     Write-Log "Transfer session ${FinalStatus}: $SessionID" -Level INFO
 }
 
-function Get-LastInterruptedSession {
-    <#
-    .SYNOPSIS
-        Gets last interrupted transfer session
-    #>
-    
-    if ($null -eq $script:ResumeDB) {
-        Initialize-ResumeDB
-    }
-    
-    $interrupted = $script:ResumeDB.Sessions.GetEnumerator() | Where-Object {
-        $_.Value.Status -eq 'InProgress' -or $_.Value.Status -eq 'Interrupted'
-    } | Sort-Object { $_.Value.StartTime } -Descending | Select-Object -First 1
-    
-    if ($interrupted) {
-        return $interrupted.Value
-    }
-    
-    return $null
-}
-
 function Test-FileInSession {
     <#
     .SYNOPSIS
