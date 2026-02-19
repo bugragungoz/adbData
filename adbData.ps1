@@ -2311,31 +2311,17 @@ function Get-WindowsFileHash {
 function Compare-HashSecure {
     <#
     .SYNOPSIS
-        Timing-safe hash comparison to prevent timing attacks
+        Standard string comparison for hash verification
     .DESCRIPTION
-        Constant-time comparison prevents timing analysis
+        Replaced slow constant-time comparison with standard comparison for performance.
+        Timing attacks are not a relevant threat model for local file transfer verification.
     #>
     param(
         [string]$Hash1,
         [string]$Hash2
     )
     
-    # Quick length check (timing-safe)
-    if ($Hash1.Length -ne $Hash2.Length) {
-        Start-Sleep -Milliseconds (Get-Random -Minimum 10 -Maximum 30)
-        return $false
-    }
-    
-    # Constant-time comparison
-    $result = 0
-    for ($i = 0; $i -lt $Hash1.Length; $i++) {
-        $result = $result -bor ([int][char]$Hash1[$i] -bxor [int][char]$Hash2[$i])
-    }
-    
-    # Add random delay to prevent timing analysis
-    Start-Sleep -Milliseconds (Get-Random -Minimum 10 -Maximum 30)
-    
-    return ($result -eq 0)
+    return $Hash1 -eq $Hash2
 }
 
 function Test-FileIntegrity {
