@@ -2010,8 +2010,8 @@ function Get-AndroidFileList {
             $findCmd = "find '$Path' -maxdepth 1 -type f"
         }
         
-        # Memory optimization: Use ArrayList for better performance
-        $files = New-Object System.Collections.ArrayList
+        # Memory optimization: Use List[string] for better performance
+        $files = New-Object 'System.Collections.Generic.List[string]'
         $count = 0
         $MAX_FILES = 100000  # Prevent resource exhaustion
         
@@ -2044,12 +2044,7 @@ function Get-AndroidFileList {
                     [void]$files.Add($trimmed)
                 }
                 
-                # Force garbage collection periodically to prevent memory leak
                 $count++
-                if ($count % $script:Config.GCInterval -eq 0) {
-                    [System.GC]::Collect()
-                    [System.GC]::WaitForPendingFinalizers()
-                }
             }
         }
         
@@ -2151,7 +2146,7 @@ function Get-AndroidFileListWithSize {
             return @()
         }
         
-        $results = New-Object System.Collections.ArrayList
+        $results = New-Object 'System.Collections.Generic.List[object]'
         $count = 0
         $MAX_FILES = 100000  # Military-grade: Resource exhaustion protection
         
@@ -2184,11 +2179,7 @@ function Get-AndroidFileListWithSize {
                 
                 [void]$results.Add($fileInfo)
                 
-                # Garbage collection for large lists
                 $count++
-                if ($count % $script:Config.GCInterval -eq 0) {
-                    [System.GC]::Collect()
-                }
             }
         }
         
