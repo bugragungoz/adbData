@@ -68,6 +68,28 @@ $script:Version = "1.0.0"
 $script:ScriptRoot = $PSScriptRoot
 $script:SessionID = (Get-Date -Format "yyyyMMdd_HHmmss")
 
+# UTF-8 Encoding Configuration
+# Required for proper handling of non-ASCII characters (Turkish, etc.) in file names
+$script:OriginalOutputEncoding = [Console]::OutputEncoding
+$script:OriginalInputEncoding = [Console]::InputEncoding
+$script:OriginalCodePage = $null
+
+# Set UTF-8 encoding for console and output
+try {
+    [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+    [Console]::InputEncoding = [System.Text.Encoding]::UTF8
+    $OutputEncoding = [System.Text.Encoding]::UTF8
+    
+    # Set code page to UTF-8 (65001)
+    $chcpResult = & cmd /c chcp 65001 2>&1
+    if ($chcpResult -match '(\d+)') {
+        $script:OriginalCodePage = $Matches[1]
+    }
+}
+catch {
+    Write-Warning "Failed to set UTF-8 encoding: $($_.Exception.Message)"
+}
+
 # Paths
 $script:ConfigDir = Join-Path $script:ScriptRoot "config"
 $script:LogDir = Join-Path $script:ScriptRoot "logs"
@@ -208,6 +230,116 @@ function New-ErrorReport {
     }
     
     return $errorReport
+}
+
+function Invoke-ADBCommandUTF8 {
+    <#
+    .SYNOPSIS
+        Executes ADB command with proper UTF-8 encoding handling
+    .DESCRIPTION
+        Wrapper for ADB commands that ensures proper UTF-8 encoding for 
+        non-ASCII characters (Turkish, etc.) in file names.
+        Use this for commands that return file names or paths.
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$DeviceID,
+        
+        [Parameter(Mandatory=$true)]
+        [string]$ShellCommand,
+        
+        [switch]$RawOutput
+    )
+    
+    try {
+        # Use cmd /c with chcp 65001 to ensure UTF-8 output
+        $cmdArgs = "/c chcp 65001 >nul && `"$($script:ADB)`" -s $DeviceID shell $ShellCommand"
+        
+        $psi = New-Object System.Diagnostics.ProcessStartInfo
+        $psi.FileName = "cmd.exe"
+        $psi.Arguments = $cmdArgs
+        $psi.UseShellExecute = $false
+        $psi.RedirectStandardOutput = $true
+        $psi.RedirectStandardError = $true
+        $psi.CreateNoWindow = $true
+        $psi.StandardOutputEncoding = [System.Text.Encoding]::UTF8
+        $psi.StandardErrorEncoding = [System.Text.Encoding]::UTF8
+        
+        $process = [System.Diagnostics.Process]::Start($psi)
+        $stdout = $process.StandardOutput.ReadToEnd()
+        $stderr = $process.StandardError.ReadToEnd()
+        $process.WaitForExit()
+        
+        $script:LastADBExitCode = $process.ExitCode
+        
+        if ($RawOutput) {
+            return $stdout
+        }
+        
+        # Combine stdout and stderr (ADB often uses stderr for normal output)
+        $output = $stdout
+        if (-not [string]::IsNullOrEmpty($stderr) -and $process.ExitCode -ne 0) {
+            $output += "`n$stderr"
+        }
+        
+        return $output.TrimEnd()
+    }
+    catch {
+        Write-Log "ADB command failed: $($_.Exception.Message)" -Level ERROR
+        $script:LastADBExitCode = -1
+        return $null
+    }
+}
+
+function Invoke-ADBPullUTF8 {
+    <#
+    .SYNOPSIS
+        Executes ADB pull command with proper UTF-8 encoding handling
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$DeviceID,
+        
+        [Parameter(Mandatory=$true)]
+        [string]$SourcePath,
+        
+        [Parameter(Mandatory=$true)]
+        [string]$DestinationPath
+    )
+    
+    try {
+        # Use cmd /c with chcp 65001 to ensure UTF-8 path handling
+        $cmdArgs = "/c chcp 65001 >nul && `"$($script:ADB)`" -s $DeviceID pull `"$SourcePath`" `"$DestinationPath`""
+        
+        $psi = New-Object System.Diagnostics.ProcessStartInfo
+        $psi.FileName = "cmd.exe"
+        $psi.Arguments = $cmdArgs
+        $psi.UseShellExecute = $false
+        $psi.RedirectStandardOutput = $true
+        $psi.RedirectStandardError = $true
+        $psi.CreateNoWindow = $true
+        $psi.StandardOutputEncoding = [System.Text.Encoding]::UTF8
+        $psi.StandardErrorEncoding = [System.Text.Encoding]::UTF8
+        
+        $process = [System.Diagnostics.Process]::Start($psi)
+        $stdout = $process.StandardOutput.ReadToEnd()
+        $stderr = $process.StandardError.ReadToEnd()
+        $process.WaitForExit()
+        
+        $script:LastADBExitCode = $process.ExitCode
+        
+        $output = $stdout
+        if (-not [string]::IsNullOrEmpty($stderr)) {
+            $output += "`n$stderr"
+        }
+        
+        return $output.TrimEnd()
+    }
+    catch {
+        Write-Log "ADB pull failed: $($_.Exception.Message)" -Level ERROR
+        $script:LastADBExitCode = -1
+        return $null
+    }
 }
 
 function Test-ADBRateLimit {
@@ -523,7 +655,10 @@ function Test-InputSafety {
         
         'DeviceID' {
             # Device ID format validation (alphanumeric, colons for WiFi)
-            if ($Input -notmatch '^[a-zA-Z0-9\.\:\-]+$') {
+            # Use CultureInvariant for Turkish locale compatibility
+            $devicePattern = '^[a-zA-Z0-9\.\:\-]+$'
+            $regexOpts = [System.Text.RegularExpressions.RegexOptions]::CultureInvariant
+            if (-not [regex]::IsMatch($Input, $devicePattern, $regexOpts)) {
                 $validationResult.IsValid = $false
                 $validationResult.ErrorMessage = "Invalid device ID format"
                 return $validationResult
@@ -679,22 +814,24 @@ function Protect-ShellPath {
         throw "Path contains invalid Unicode characters"
     }
     
-    # Whitelist validation
-    # Allowed: alphanumeric, forward slash, dash, underscore, dot, space
-    # This is more restrictive but much safer
-    $allowedPattern = '^[a-zA-Z0-9/\-_\.\s]+$'
-    if ($Path -notmatch $allowedPattern) {
-        Write-Log "Path contains disallowed characters: $Path" -Level WARNING
-        # Remove ALL non-whitelisted characters
-        $Path = $Path -replace '[^a-zA-Z0-9/\-_\.\s]', ''
+    # Whitelist validation - expanded for file transfer compatibility
+    # Allowed: alphanumeric, forward slash, dash, underscore, dot, space, 
+    #          parentheses, at-sign, comma, plus, equals, hash, percent, 
+    #          exclamation, tilde, brackets, braces, caret (common in filenames)
+    # IMPORTANT: Use CultureInvariant to handle Turkish locale I/i issue
+    $allowedPattern = '^[a-zA-Z0-9/\-_\.\s\(\)@,\+=#%!\~\[\]\{\}\^]+$'
+    $regexOptions = [System.Text.RegularExpressions.RegexOptions]::CultureInvariant
+    if (-not [regex]::IsMatch($Path, $allowedPattern, $regexOptions)) {
+        Write-Log "Path contains special characters: $Path" -Level DEBUG
     }
     
-    # Block shell metacharacters
-    $dangerousChars = @(';', '|', '&', '$', '<', '>', '`', '\', '!', '*', '?', '[', ']', '{', '}', '(', ')', '^', '~', '#', '%', '@')
+    # Block ONLY truly dangerous shell metacharacters that enable command injection
+    # These cannot be safely escaped even in single quotes
+    $dangerousChars = @(';', '|', '&', '$', '<', '>', '`', '\')
     foreach ($char in $dangerousChars) {
         if ($Path.Contains($char)) {
-            Write-Log "Dangerous character '$char' removed from path" -Level WARNING
-            $Path = $Path.Replace($char, '')
+            Write-Log "Dangerous shell metacharacter '$char' found in path" -Level WARNING
+            throw "Path contains dangerous shell metacharacter: $char"
         }
     }
     
@@ -715,11 +852,6 @@ function Protect-ShellPath {
             throw "Command injection pattern detected: $pattern (security violation)"
         }
     }
-    
-    # Escape special chars for shell
-    $Path = $Path -replace '"', '\"'  # Escape double quotes
-    $Path = $Path -replace "'", "'\\''"  # Escape single quotes for POSIX shell
-    $Path = $Path -replace '\$', '\$'  # Escape dollar sign
     
     # Trim whitespace
     $Path = $Path.Trim()
@@ -2015,9 +2147,10 @@ function Get-AndroidFileList {
         $count = 0
         $MAX_FILES = 100000  # Prevent resource exhaustion
         
-        $output = & $script:ADB -s $DeviceID shell $findCmd 2>&1
+        # Use UTF-8 aware ADB command wrapper for proper encoding
+        $output = Invoke-ADBCommandUTF8 -DeviceID $DeviceID -ShellCommand $findCmd
         
-        if ($LASTEXITCODE -ne 0) {
+        if ($script:LastADBExitCode -ne 0) {
             Write-Log "Failed to list files in $Path" -Level ERROR
             return @()
         }
@@ -2075,9 +2208,9 @@ function Get-AndroidFileSize {
         # Escape single quotes in path for shell command
         $escapedPath = $FilePath -replace "'", "'\\''"
         
-        # Try stat command first (most reliable)
-        $size = & $script:ADB -s $DeviceID shell "stat -c%s '$escapedPath'" 2>&1
-        $sizeStr = ($size | Out-String).Trim()
+        # Try stat command first (most reliable) - Use UTF-8 aware wrapper
+        $size = Invoke-ADBCommandUTF8 -DeviceID $DeviceID -ShellCommand "stat -c%s '$escapedPath'"
+        $sizeStr = if ($size) { $size.Trim() } else { "" }
         
         # Check if stat returned a valid number
         if ($sizeStr -match '^\d+$') {
@@ -2086,8 +2219,8 @@ function Get-AndroidFileSize {
         
         # Fallback: Try ls -l and parse size
         Write-Log "stat failed for $FilePath, trying ls -l" -Level DEBUG
-        $lsOutput = & $script:ADB -s $DeviceID shell "ls -l '$escapedPath'" 2>&1
-        $lsStr = ($lsOutput | Out-String).Trim()
+        $lsOutput = Invoke-ADBCommandUTF8 -DeviceID $DeviceID -ShellCommand "ls -l '$escapedPath'"
+        $lsStr = if ($lsOutput) { $lsOutput.Trim() } else { "" }
         
         # ls -l output format: -rw-r--r-- 1 user group SIZE date time filename
         # Size is typically the 5th field
@@ -2098,8 +2231,8 @@ function Get-AndroidFileSize {
         
         # Fallback: Try wc -c
         Write-Log "ls -l failed for $FilePath, trying wc -c" -Level DEBUG
-        $wcOutput = & $script:ADB -s $DeviceID shell "wc -c < '$escapedPath'" 2>&1
-        $wcStr = ($wcOutput | Out-String).Trim()
+        $wcOutput = Invoke-ADBCommandUTF8 -DeviceID $DeviceID -ShellCommand "wc -c < '$escapedPath'"
+        $wcStr = if ($wcOutput) { $wcOutput.Trim() } else { "" }
         
         if ($wcStr -match '^\d+$') {
             return [long]$wcStr
@@ -2144,21 +2277,22 @@ function Get-AndroidFileListWithSize {
             $cmd = "find '$Path' -maxdepth 1 -type f -exec stat -c'%s %n' {} \;"
         }
         
-        $output = & $script:ADB -s $DeviceID shell $cmd 2>&1
+        # Use UTF-8 aware ADB command wrapper for proper encoding
+        $output = Invoke-ADBCommandUTF8 -DeviceID $DeviceID -ShellCommand $cmd
         
-        if ($LASTEXITCODE -ne 0) {
+        if ($script:LastADBExitCode -ne 0) {
             Write-Log "Failed to list files with sizes in $Path" -Level ERROR
             return @()
         }
         
         $results = New-Object System.Collections.ArrayList
         $count = 0
-        $MAX_FILES = 100000  # Military-grade: Resource exhaustion protection
+        $MAX_FILES = 100000  # Resource exhaustion protection
         
         foreach ($line in ($output -split "`n")) {
             if ([string]::IsNullOrWhiteSpace($line)) { continue }
             
-            # Military-grade: Prevent resource exhaustion
+            # Prevent resource exhaustion
             if ($count -ge $MAX_FILES) {
                 Write-Log "File list exceeded maximum safe limit ($MAX_FILES files). Truncating." -Level WARNING
                 break
@@ -2237,9 +2371,10 @@ function Get-AndroidFileHash {
             'SHA256' { "sha256sum" }
         }
         
-        $output = & $script:ADB -s $DeviceID shell "$cmd '$FilePath'" 2>&1
+        # Use UTF-8 aware ADB command wrapper for proper encoding
+        $output = Invoke-ADBCommandUTF8 -DeviceID $DeviceID -ShellCommand "$cmd '$FilePath'"
         
-        if ($LASTEXITCODE -ne 0) {
+        if ($script:LastADBExitCode -ne 0) {
             Write-Log "Hash calculation failed for $FilePath" -Level ERROR
             Write-AuditLog -Action "CalculateHash" -Resource $FilePath -Result "Failure"
             return $null
@@ -2539,11 +2674,11 @@ function Copy-AndroidFile {
                 Write-Log "Retry attempt $attempt of $maxRetries" -Level WARNING
             }
             
-            # Execute ADB pull with sanitized path
-            $result = & $script:ADB -s $DeviceID pull "$safeSourcePath" "$tempPath" 2>&1
+            # Execute ADB pull with UTF-8 encoding support
+            $pullResult = Invoke-ADBPullUTF8 -DeviceID $DeviceID -SourcePath $safeSourcePath -DestinationPath $tempPath
             
-            if ($LASTEXITCODE -ne 0) {
-                throw "ADB pull failed: $result"
+            if ($script:LastADBExitCode -ne 0) {
+                throw "ADB pull failed: $pullResult"
             }
             
             # Verify if requested
