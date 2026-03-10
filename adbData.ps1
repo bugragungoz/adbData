@@ -311,9 +311,9 @@ function Invoke-ADBPullUTF8 {
     )
     
     try {
-        # Escape double quotes in paths to prevent command injection
-        $safeSource = $SourcePath -replace '"', '\"'
-        $safeDest = $DestinationPath -replace '"', '\"'
+        # Remove double quotes from paths to prevent cmd.exe argument injection
+        $safeSource = $SourcePath.Replace('"', '')
+        $safeDest = $DestinationPath.Replace('"', '')
         
         # Use cmd /c with chcp 65001 to ensure UTF-8 path handling
         $cmdArgs = "/c chcp 65001 >nul && `"$($script:ADB)`" -s $DeviceID pull `"$safeSource`" `"$safeDest`""
@@ -3334,7 +3334,7 @@ function Show-TransferSummary {
         Shows transfer summary statistics with destination path
     #>
     param(
-        [string]$DestinationPath = $null
+        [string]$DestinationPath = ""
     )
     
     $duration = (Get-Date) - $script:TransferStats.StartTime
@@ -3366,7 +3366,7 @@ function Show-TransferSummary {
     }
 
     # Show destination path
-    $showDest = if ($DestinationPath) { $DestinationPath } else { $script:Config.DefaultDestination }
+    $showDest = if (-not [string]::IsNullOrEmpty($DestinationPath)) { $DestinationPath } else { $script:Config.DefaultDestination }
     Write-Host ""
     Write-Host "  Files saved to: $showDest" -ForegroundColor Cyan
     Write-Host "  Log: $($script:LogFile)" -ForegroundColor DarkGray
@@ -4085,8 +4085,8 @@ function Show-FileExplorer {
         Write-Host "  ─────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
         Write-Host ""
 
-        # List contents of current directory
-        $escapedPath = $currentPath -replace "'", "'\\''"
+        # List contents of current directory - escape single quotes for shell
+        $escapedPath = $currentPath -replace "'", "'\''"
         $listCmd = "ls -la '$escapedPath' 2>/dev/null"
         $rawOutput = Invoke-ADBCommandUTF8 -DeviceID $deviceID -ShellCommand $listCmd
 
