@@ -1971,7 +1971,10 @@ function Get-ADBDevices {
     try {
         # Start ADB server if not running
         $null = & $script:ADB start-server 2>&1
-        Start-Sleep -Milliseconds $script:Config.ADBStartupDelay
+        $startupDelay = if ($script:Config.ADBStartupDelay -and $script:Config.ADBStartupDelay -ge 500) {
+            $script:Config.ADBStartupDelay
+        } else { 1000 }
+        Start-Sleep -Milliseconds $startupDelay
         
         $rawOutput = & $script:ADB devices -l 2>&1
         
@@ -2678,7 +2681,17 @@ function Copy-AndroidFile {
             $pullResult = Invoke-ADBPullUTF8 -DeviceID $DeviceID -SourcePath $safeSourcePath -DestinationPath $tempPath
             
             if ($script:LastADBExitCode -ne 0) {
-                throw "ADB pull failed: $pullResult"
+                # Check for common ADB errors and provide better messages
+                $errorDetail = if ($pullResult -match "device not found|no devices") {
+                    "Device disconnected. Reconnect and try again."
+                } elseif ($pullResult -match "Permission denied|not accessible") {
+                    "Permission denied on device. File may be protected."
+                } elseif ($pullResult -match "does not exist|No such file") {
+                    "Source file not found on device."
+                } else {
+                    $pullResult
+                }
+                throw "ADB pull failed: $errorDetail"
             }
             
             # Verify if requested
@@ -3091,111 +3104,58 @@ function Invoke-Preset {
 function Show-Banner {
     <#
     .SYNOPSIS
-        Displays application banner
+        Displays application banner with modern CLI aesthetic
     #>
     Clear-Host
     Write-Host ""
-    Write-Host "================================================================================" -ForegroundColor Cyan
-    Write-Host "                                                                                " -ForegroundColor Cyan
-    Write-Host "          ######  ########   #######  ##     ## ########                        " -ForegroundColor Cyan
-    Write-Host "         ##    ## ##     ## ##     ##  ##   ##       ##                         " -ForegroundColor Cyan
-    Write-Host "         ##       ##     ## ##     ##   ## ##       ##                          " -ForegroundColor Cyan
-    Write-Host "         ##       ########  ##     ##    ###       ##                           " -ForegroundColor Cyan
-    Write-Host "         ##       ##   ##   ##     ##   ## ##     ##                            " -ForegroundColor Cyan
-    Write-Host "         ##    ## ##    ##  ##     ##  ##   ##   ##                             " -ForegroundColor Cyan
-    Write-Host "          ######  ##     ##  #######  ##     ## ########                        " -ForegroundColor Cyan
-    Write-Host "                                                                                " -ForegroundColor Cyan
-    Write-Host "         High-Performance Android File Transfer via ADB v$($script:Version)     " -ForegroundColor Cyan
-    Write-Host "                                                                                " -ForegroundColor Cyan
-    Write-Host "================================================================================" -ForegroundColor Cyan
+    Write-Host "  adbData" -ForegroundColor White -NoNewline
+    Write-Host " v$($script:Version)" -ForegroundColor DarkGray
+    Write-Host "  High-performance Android file transfer via ADB" -ForegroundColor DarkGray
     Write-Host ""
-    Write-Host "  Author: Bugra | Development: Claude 4.5 Sonnet AI | Platform: Windows" -ForegroundColor Gray
-    Write-Host "  Session ID: $($script:SessionID)" -ForegroundColor Gray
-    Write-Host ""
-    Write-Host "  [!] Press Ctrl+C at any time to abort operation" -ForegroundColor Yellow
+    Write-Host "  ─────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
     Write-Host ""
 }
 
 function Show-Disclaimer {
     <#
     .SYNOPSIS
-        Shows legal disclaimer and gets user consent
+        Shows compact legal disclaimer and gets user consent with Y/N
     #>
     Clear-Host
     Write-Host ""
-    Write-Host "===============================================================================" -ForegroundColor Yellow
-    Write-Host "                          [!] DISCLAIMER - PAGE 1/2                            " -ForegroundColor Yellow
-    Write-Host "===============================================================================" -ForegroundColor Yellow
+    Write-Host "  adbData" -ForegroundColor White -NoNewline
+    Write-Host " v$($script:Version)" -ForegroundColor DarkGray
     Write-Host ""
-    Write-Host "  [!] WARNING: NOT EXTENSIVELY TESTED" -ForegroundColor Red
-    Write-Host "  This software is provided AS-IS without any warranty." -ForegroundColor Yellow
-    Write-Host "  Use at your own risk. Always backup your data first." -ForegroundColor Yellow
+    Write-Host "  ─────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
     Write-Host ""
-    Write-Host "  WHAT THIS TOOL DOES:" -ForegroundColor Cyan
-    Write-Host "  + Transfers files from Android to Windows via ADB" -ForegroundColor White
-    Write-Host "  + READ-ONLY on Android (files never modified/deleted)" -ForegroundColor Green
-    Write-Host "  + Hash verification for data integrity" -ForegroundColor White
-    Write-Host "  + Atomic operations (no partial file corruption)" -ForegroundColor White
+    Write-Host "  Disclaimer" -ForegroundColor Yellow
     Write-Host ""
-    Write-Host "  REQUIREMENTS:" -ForegroundColor Cyan
-    Write-Host "  - USB Debugging enabled on Android device" -ForegroundColor White
-    Write-Host "  - Device authorization (prompt on first connect)" -ForegroundColor White
-    Write-Host "  - Sufficient disk space on destination" -ForegroundColor White
+    Write-Host "  This software is provided AS-IS. No warranty. Use at own risk." -ForegroundColor DarkGray
+    Write-Host "  Author is not responsible for any data loss or damage." -ForegroundColor DarkGray
     Write-Host ""
-    Write-Host "  NO WARRANTY - NO LIABILITY:" -ForegroundColor Red
-    Write-Host "  Author is NOT responsible for any data loss or damage." -ForegroundColor Yellow
+    Write-Host "  * READ-ONLY access on Android (files never modified/deleted)" -ForegroundColor DarkGray
+    Write-Host "  * Transfers files from Android to Windows via ADB" -ForegroundColor DarkGray
+    Write-Host "  * Hash verification for data integrity" -ForegroundColor DarkGray
     Write-Host ""
-    Write-Host "===============================================================================" -ForegroundColor Yellow
+    Write-Host "  Requires USB Debugging enabled and device authorization." -ForegroundColor DarkGray
     Write-Host ""
-    Write-Host "  Press [ENTER] to view detailed information (Page 2/2)... " -ForegroundColor Gray -NoNewline
-    $null = Read-Host
-    
-    # Page 2 - Detailed information
-    Clear-Host
+    Write-Host "  ─────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
     Write-Host ""
-    Write-Host "===============================================================================" -ForegroundColor Yellow
-    Write-Host "                      DETAILED INFORMATION - PAGE 2/2                          " -ForegroundColor Yellow
-    Write-Host "===============================================================================" -ForegroundColor Yellow
-    Write-Host ""
-    Write-Host "  ANDROID DEVICE SAFETY:" -ForegroundColor Green
-    Write-Host "  + READ-ONLY access - files NEVER modified on device" -ForegroundColor White
-    Write-Host "  + Files are COPIED, not moved (originals remain intact)" -ForegroundColor White
-    Write-Host "  + Safe to interrupt - device data unaffected" -ForegroundColor White
-    Write-Host ""
-    Write-Host "  DATA INTEGRITY:" -ForegroundColor Cyan
-    Write-Host "  - Hash verification (MD5/SHA256)" -ForegroundColor White
-    Write-Host "  - Atomic operations prevent corruption" -ForegroundColor White
-    Write-Host "  - Transaction logs track all operations" -ForegroundColor White
-    Write-Host "  - Disk space validation before transfer" -ForegroundColor White
-    Write-Host ""
-    Write-Host "  SECURITY FEATURES:" -ForegroundColor Cyan
-    Write-Host "  - Command injection protection" -ForegroundColor White
-    Write-Host "  - Path traversal prevention" -ForegroundColor White
-    Write-Host "  - Rate limiting & audit logging" -ForegroundColor White
-    Write-Host ""
-    Write-Host "  BY PROCEEDING, YOU:" -ForegroundColor Red
-    Write-Host "  - Acknowledge this is experimental software" -ForegroundColor Yellow
-    Write-Host "  - Accept full responsibility for any consequences" -ForegroundColor Yellow
-    Write-Host "  - Confirm you have backed up important data" -ForegroundColor Yellow
-    Write-Host ""
-    Write-Host "===============================================================================" -ForegroundColor Yellow
-    Write-Host ""
-    
-    # Get user consent
+
     while ($true) {
-        Write-Host "  Type 'ACCEPT' to proceed or 'CANCEL' to exit: " -ForegroundColor Yellow -NoNewline
+        Write-Host "  Accept and continue? (Y/N): " -ForegroundColor White -NoNewline
         $response = Read-Host
-        
-        if ($response -eq "ACCEPT" -or $response -eq "accept") {
+
+        if ($response.Equals("Y", [System.StringComparison]::OrdinalIgnoreCase)) {
             Write-Log "User accepted disclaimer" -Level INFO -NoConsole
             return $true
         }
-        elseif ($response -eq "CANCEL" -or $response -eq "cancel") {
+        elseif ($response.Equals("N", [System.StringComparison]::OrdinalIgnoreCase)) {
             Write-Log "User declined disclaimer" -Level INFO -NoConsole
             return $false
         }
         else {
-            Write-Host "  [!] Invalid input. Enter 'ACCEPT' or 'CANCEL'." -ForegroundColor Red
+            Write-Host "  Please enter Y or N." -ForegroundColor DarkYellow
         }
     }
 }
@@ -3203,87 +3163,37 @@ function Show-Disclaimer {
 function Show-ScriptInfo {
     <#
     .SYNOPSIS
-        Shows script information and usage guide
+        Shows script information and usage guide (compact single page)
     #>
     Clear-Host
+    Show-Banner
+
+    Write-Host "  About" -ForegroundColor White
     Write-Host ""
-    Write-Host "===============================================================================" -ForegroundColor Cyan
-    Write-Host "                         TOOL INFORMATION (Page 1/2)                            " -ForegroundColor Cyan
-    Write-Host "===============================================================================" -ForegroundColor Cyan
+    Write-Host "  Fast, secure file transfer from Android to Windows via ADB." -ForegroundColor DarkGray
+    Write-Host "  Solves MTP freezing, data loss, and performance issues." -ForegroundColor DarkGray
     Write-Host ""
-    Write-Host "  WHAT DOES IT DO:" -ForegroundColor Yellow
-    Write-Host "  ----------------" -ForegroundColor Gray
+    Write-Host "  Features" -ForegroundColor White
     Write-Host ""
-    Write-Host "  Secure and fast file transfer from Android devices to Windows PC." -ForegroundColor White
-    Write-Host "  Addresses freezing, data loss, and performance issues" -ForegroundColor White
-    Write-Host "  experienced with Windows' built-in MTP protocol." -ForegroundColor White
+    Write-Host "    Ready presets      Camera, WhatsApp, Screenshots, Downloads" -ForegroundColor DarkGray
+    Write-Host "    Hash verification  MD5/SHA256 integrity guarantee" -ForegroundColor DarkGray
+    Write-Host "    Auto retry         Continues on connection drops" -ForegroundColor DarkGray
+    Write-Host "    Progress tracking  Real-time transfer status" -ForegroundColor DarkGray
+    Write-Host "    READ-ONLY          Device files are never modified" -ForegroundColor DarkGray
     Write-Host ""
-    Write-Host "  KEY FEATURES:" -ForegroundColor Yellow
-    Write-Host "  -------------" -ForegroundColor Gray
+    Write-Host "  Performance: ~2-3x faster (large files), ~5-10x (small files) vs MTP" -ForegroundColor DarkGray
     Write-Host ""
-    Write-Host "  * Ready Presets: Camera, WhatsApp, Screenshots, etc." -ForegroundColor Cyan
-    Write-Host "  * Hash Verification: Data integrity guarantee (MD5/SHA256)" -ForegroundColor Cyan
-    Write-Host "  * Automatic Retry: Continues even if connection drops" -ForegroundColor Cyan
-    Write-Host "  * Progress Indicator: Real-time transfer status" -ForegroundColor Cyan
-    Write-Host "  * Detailed Logs: All operations are recorded" -ForegroundColor Cyan
-    Write-Host "  * Custom Filters: File extension, size, date filters" -ForegroundColor Cyan
-    Write-Host "  * Disk Space Check: Prevents mid-transfer failures" -ForegroundColor Cyan
-    Write-Host "  * READ-ONLY Android: Device files are never modified" -ForegroundColor Green
+    Write-Host "  How to use" -ForegroundColor White
     Write-Host ""
-    Write-Host "  PERFORMANCE:" -ForegroundColor Yellow
-    Write-Host "  ------------" -ForegroundColor Gray
+    Write-Host "    1. Connect Android via USB" -ForegroundColor DarkGray
+    Write-Host "    2. Enable USB Debugging (Settings > Developer Options)" -ForegroundColor DarkGray
+    Write-Host "    3. Authorize 'Allow USB debugging' on device" -ForegroundColor DarkGray
+    Write-Host "    4. Select transfer from main menu" -ForegroundColor DarkGray
     Write-Host ""
-    Write-Host "  * ~2-3x faster than MTP for large files" -ForegroundColor Green
-    Write-Host "  * ~5-10x faster for small files" -ForegroundColor Green
-    Write-Host "  * No freezing with 1GB+ files" -ForegroundColor Green
+    Write-Host "  ─────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
     Write-Host ""
-    Write-Host "===============================================================================" -ForegroundColor Cyan
-    Write-Host ""
-    Write-Host "  [Press any key]" -ForegroundColor Yellow
-    $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
-    
-    # Page 2
-    Clear-Host
-    Write-Host ""
-    Write-Host "===============================================================================" -ForegroundColor Cyan
-    Write-Host "                          USAGE GUIDE (Page 2/2)                                " -ForegroundColor Cyan
-    Write-Host "===============================================================================" -ForegroundColor Cyan
-    Write-Host ""
-    Write-Host "  HOW TO USE:" -ForegroundColor Yellow
-    Write-Host "  -----------" -ForegroundColor Gray
-    Write-Host ""
-    Write-Host "  1. Connect Android device via USB" -ForegroundColor White
-    Write-Host "  2. Verify USB Debugging is enabled" -ForegroundColor White
-    Write-Host "     (Settings > Developer Options > USB Debugging)" -ForegroundColor Gray
-    Write-Host "  3. Authorize 'Allow USB debugging' prompt on device" -ForegroundColor White
-    Write-Host "  4. Select transfer method from main menu" -ForegroundColor White
-    Write-Host "  5. Wait until transfer completes" -ForegroundColor White
-    Write-Host ""
-    Write-Host "  COLOR LEGEND:" -ForegroundColor Yellow
-    Write-Host "  -------------" -ForegroundColor Gray
-    Write-Host ""
-    Write-Host "  [OK]    Successful operation" -ForegroundColor Green
-    Write-Host "  [!]     Warning message" -ForegroundColor Yellow
-    Write-Host "  [ERROR] Error message" -ForegroundColor Red
-    Write-Host "  [INFO]  Information message" -ForegroundColor Cyan
-    Write-Host "  [CHECK] Verification in progress" -ForegroundColor Cyan
-    Write-Host ""
-    Write-Host "  TIPS:" -ForegroundColor Yellow
-    Write-Host "  -----" -ForegroundColor Gray
-    Write-Host ""
-    Write-Host "  * If first transfer is slow, try different USB cable (USB 2.0 vs 3.0)" -ForegroundColor Cyan
-    Write-Host "  * Hash verification may take time for large transfers" -ForegroundColor Cyan
-    Write-Host "  * Presets are optimized for most common scenarios" -ForegroundColor Cyan
-    Write-Host "  * Device remains usable during transfer" -ForegroundColor Cyan
-    Write-Host "  * Android files are never modified (READ-ONLY access)" -ForegroundColor Green
-    Write-Host ""
-    Write-Host "  LOGS: $($script:LogDir)" -ForegroundColor Gray
-    Write-Host "  SETTINGS: $($script:ConfigDir)" -ForegroundColor Gray
-    Write-Host ""
-    Write-Host "===============================================================================" -ForegroundColor Cyan
-    Write-Host ""
-    Write-Host "  [Press any key]" -ForegroundColor Yellow
-    $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+    Write-Host "  Press Enter to continue..." -ForegroundColor DarkGray -NoNewline
+    $null = Read-Host
 }
 
 function Show-TransferSummary {
@@ -3295,38 +3205,34 @@ function Show-TransferSummary {
     $avgSpeed = if ($duration.TotalSeconds -gt 0) {
         $script:TransferStats.TransferredBytes / $duration.TotalSeconds
     } else { 0 }
-    
+
     Write-Host ""
-    Write-Host "===============================================================================" -ForegroundColor Green
-    Write-Host "                            TRANSFER SUMMARY                                    " -ForegroundColor Green
-    Write-Host "===============================================================================" -ForegroundColor Green
+    Write-Host "  ─────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
     Write-Host ""
-    Write-Host "  STATISTICS:" -ForegroundColor Yellow
-    Write-Host "  -----------" -ForegroundColor Gray
+    Write-Host "  Transfer Summary" -ForegroundColor White
     Write-Host ""
-    Write-Host "     Total Files         : $($script:TransferStats.TotalFiles)" -ForegroundColor White
-    Write-Host "     Transferred         : $($script:TransferStats.TransferredFiles)" -ForegroundColor Green
-    Write-Host "     Skipped (Exists)    : $($script:TransferStats.SkippedFiles)" -ForegroundColor Cyan
-    Write-Host "     Failed              : $($script:TransferStats.FailedFiles)" -ForegroundColor Red
+    Write-Host "    Total files     $($script:TransferStats.TotalFiles)" -ForegroundColor DarkGray
+    Write-Host "    Transferred     $($script:TransferStats.TransferredFiles)" -ForegroundColor Green
+    Write-Host "    Skipped         $($script:TransferStats.SkippedFiles)" -ForegroundColor DarkGray
+    Write-Host "    Failed          $($script:TransferStats.FailedFiles)" -ForegroundColor $(if ($script:TransferStats.FailedFiles -gt 0) { "Red" } else { "DarkGray" })
     Write-Host ""
-    Write-Host "     Total Size          : $(Format-FileSize $script:TransferStats.TotalBytes)" -ForegroundColor White
-    Write-Host "     Transferred         : $(Format-FileSize $script:TransferStats.TransferredBytes)" -ForegroundColor Green
+    Write-Host "    Total size      $(Format-FileSize $script:TransferStats.TotalBytes)" -ForegroundColor DarkGray
+    Write-Host "    Transferred     $(Format-FileSize $script:TransferStats.TransferredBytes)" -ForegroundColor Green
+    Write-Host "    Duration        $(Format-Duration $duration)" -ForegroundColor DarkGray
+    Write-Host "    Avg speed       $(Format-FileSize $avgSpeed)/s" -ForegroundColor DarkGray
     Write-Host ""
-    Write-Host "     Duration            : $(Format-Duration $duration)" -ForegroundColor Cyan
-    Write-Host "     Average Speed       : $(Format-FileSize $avgSpeed)/s" -ForegroundColor Cyan
-    Write-Host ""
-    
+
     if ($script:TransferStats.FailedFiles -eq 0) {
-        Write-Host "  [SUCCESS] Transfer completed" -ForegroundColor Green
+        Write-Host "  * Transfer completed successfully" -ForegroundColor Green
     }
     else {
-        Write-Host "  [WARNING] Some files failed to transfer. Check logs for details." -ForegroundColor Yellow
+        Write-Host "  ! Some files failed. Check logs for details." -ForegroundColor Yellow
     }
-    
+
     Write-Host ""
-    Write-Host "  Log file: $($script:LogFile)" -ForegroundColor Gray
+    Write-Host "  Log: $($script:LogFile)" -ForegroundColor DarkGray
     Write-Host ""
-    Write-Host "===============================================================================" -ForegroundColor Green
+    Write-Host "  ─────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
     Write-Host ""
 }
 
@@ -3337,113 +3243,122 @@ function Show-TransferSummary {
 function Show-DeviceSelection {
     <#
     .SYNOPSIS
-        Shows device selection menu
+        Shows device selection menu with improved detection
     #>
     Write-Host ""
-    Write-Host "  ===============================================================" -ForegroundColor Cyan
-    Write-Host "                      DEVICE SELECTION                           " -ForegroundColor Cyan
-    Write-Host "  ===============================================================" -ForegroundColor Cyan
+    Write-Host "  Device Selection" -ForegroundColor White
     Write-Host ""
-    
-    Write-Host "  Scanning for devices..." -ForegroundColor Gray
-    
-    # Try multiple times in case ADB server needs restart
+    Write-Host "  ─────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
+    Write-Host ""
+
+    Write-Host "  Scanning for devices..." -ForegroundColor DarkGray
+
+    # Try multiple times with increasing delays for ADB server reliability
     $devices = $null
     $maxRetries = 3
-    
+
     for ($retry = 1; $retry -le $maxRetries; $retry++) {
         # Get devices and ensure it's always an array
         $result = Get-ADBDevices
         $devices = @($result)
-        
-        # Debug: Show what we received
+
         Write-Log "Device scan attempt $retry - Received type: $($result.GetType().Name), Count: $($devices.Count)" -Level DEBUG
-        
+
         if ($null -ne $devices -and $devices.Count -gt 0) {
             Write-Log "Found $($devices.Count) device(s) on attempt $retry" -Level INFO
             break
         }
-        
+
         if ($retry -lt $maxRetries) {
-            Write-Host "  Retry $retry/$maxRetries - Restarting ADB server..." -ForegroundColor Yellow
-            # Kill and restart ADB server
+            Write-Host "  Retry $retry/$maxRetries - Restarting ADB server..." -ForegroundColor DarkYellow
             $null = & $script:ADB kill-server 2>&1
-            Start-Sleep -Milliseconds 500
-            $null = & $script:ADB start-server 2>&1
             Start-Sleep -Milliseconds 1000
+            $null = & $script:ADB start-server 2>&1
+            Start-Sleep -Milliseconds 2000
         }
     }
-    
-    # Final safety check - ensure devices is an array
+
+    # Final safety check
     if ($null -eq $devices) {
         $devices = @()
     }
-    
+
     if ($devices.Count -eq 0) {
-        Write-Host "  [!] No devices found!" -ForegroundColor Red
         Write-Host ""
-        
+        Write-Host "  ! No devices found" -ForegroundColor Yellow
+        Write-Host ""
+
         # Show raw ADB output for debugging
-        Write-Host "  Diagnostic Information:" -ForegroundColor Yellow
-        Write-Host "  -----------------------" -ForegroundColor Yellow
-        
         $rawDiag = & $script:ADB devices -l 2>&1
-        Write-Host "  ADB Output: $rawDiag" -ForegroundColor Gray
+        Write-Host "  ADB output: $rawDiag" -ForegroundColor DarkGray
         Write-Host ""
-        
-        Write-Host "  Verify the following:" -ForegroundColor Yellow
-        Write-Host "   * Is device connected via USB?" -ForegroundColor Gray
-        Write-Host "   * Is USB Debugging enabled?" -ForegroundColor Gray
-        Write-Host "   * Is 'Allow USB debugging' authorized on device?" -ForegroundColor Gray
-        Write-Host "   * Is USB cable working (try a different cable/port)?" -ForegroundColor Gray
-        Write-Host "   * Run 'adb kill-server' then 'adb start-server' manually" -ForegroundColor Gray
+        Write-Host "  Troubleshooting:" -ForegroundColor White
+        Write-Host "    - Is device connected via USB?" -ForegroundColor DarkGray
+        Write-Host "    - Is USB Debugging enabled?" -ForegroundColor DarkGray
+        Write-Host "    - Did you authorize 'Allow USB debugging' on device?" -ForegroundColor DarkGray
+        Write-Host "    - Try a different USB cable or port" -ForegroundColor DarkGray
+        Write-Host "    - Try running: adb kill-server && adb start-server" -ForegroundColor DarkGray
         Write-Host ""
-        Write-Host "  [Press any key]" -ForegroundColor Yellow
-        $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+        Write-Host "  Press Enter to go back..." -ForegroundColor DarkGray -NoNewline
+        $null = Read-Host
         return $null
     }
-    
-    Write-Host "  Connected devices:" -ForegroundColor White
+
     Write-Host ""
-    
+
     for ($i = 0; $i -lt $devices.Count; $i++) {
         $device = $devices[$i]
-        $color = if ($device.State -eq "device") { "Green" } else { "Yellow" }
+        $stateColor = if ($device.State -eq "device") { "Green" } 
+                      elseif ($device.State -eq "unauthorized") { "Yellow" }
+                      else { "DarkGray" }
+
+        Write-Host "  [$($i + 1)] " -ForegroundColor White -NoNewline
+        Write-Host "$($device.Model)" -ForegroundColor $stateColor
+        Write-Host "      $($device.ID) | $($device.State) | $($device.Transport)" -ForegroundColor DarkGray
         
-        Write-Host "  [$($i + 1)] $($device.Model)" -ForegroundColor $color
-        Write-Host "      ID: $($device.ID)" -ForegroundColor Gray
-        Write-Host "      Status: $($device.State) | Connection: $($device.Transport)" -ForegroundColor Gray
+        if ($device.State -eq "unauthorized") {
+            Write-Host "      ! Check device screen for USB debugging authorization prompt" -ForegroundColor Yellow
+        }
         Write-Host ""
     }
-    
-    Write-Host "  [0] Go Back" -ForegroundColor Red
+
+    Write-Host "  [0] Go back" -ForegroundColor DarkGray
     Write-Host ""
-    
+
     while ($true) {
-        Write-Host "  Select device (0-$($devices.Count)): " -ForegroundColor Yellow -NoNewline
+        Write-Host "  Select device (0-$($devices.Count)): " -ForegroundColor White -NoNewline
         $choice = Read-Host
-        
+
         if ($choice -eq "0") {
             return $null
         }
-        
+
         $index = [int]$choice - 1
         if ($index -ge 0 -and $index -lt $devices.Count) {
             $selectedDevice = $devices[$index]
-            
-            if ($selectedDevice.State -ne "device") {
-                Write-Host "  [!] Device not ready. Status: $($selectedDevice.State)" -ForegroundColor Red
-                Write-Host "  [Press any key]" -ForegroundColor Yellow
-                $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+
+            if ($selectedDevice.State -eq "unauthorized") {
+                Write-Host ""
+                Write-Host "  ! Device not authorized. Check the USB debugging prompt on your device." -ForegroundColor Yellow
+                Write-Host "  Press Enter to go back..." -ForegroundColor DarkGray -NoNewline
+                $null = Read-Host
                 return $null
             }
-            
+
+            if ($selectedDevice.State -ne "device") {
+                Write-Host ""
+                Write-Host "  ! Device not ready. Status: $($selectedDevice.State)" -ForegroundColor Yellow
+                Write-Host "  Press Enter to go back..." -ForegroundColor DarkGray -NoNewline
+                $null = Read-Host
+                return $null
+            }
+
             $script:CurrentDevice = $selectedDevice
             Write-Log "Device selected: $($selectedDevice.Model) ($($selectedDevice.ID))" -Level INFO
             return $selectedDevice
         }
         else {
-            Write-Host "  [!] Invalid selection!" -ForegroundColor Red
+            Write-Host "  Invalid selection." -ForegroundColor DarkYellow
         }
     }
 }
@@ -3455,45 +3370,44 @@ function Show-PresetMenu {
     #>
     Clear-Host
     Show-Banner
-    
+
     if (-not $script:CurrentDevice) {
-        Write-Host "  [!] Device selection required" -ForegroundColor Red
+        Write-Host "  ! No device selected. Select a device first." -ForegroundColor Yellow
         Start-Sleep -Seconds 2
         return
     }
-    
-    Write-Host "  ===============================================================" -ForegroundColor Cyan
-    Write-Host "                    QUICK TRANSFER (PRESET)                      " -ForegroundColor Cyan
-    Write-Host "  ===============================================================" -ForegroundColor Cyan
+
+    Write-Host "  Quick Transfer (Presets)" -ForegroundColor White
     Write-Host ""
-    Write-Host "  Active Device: $($script:CurrentDevice.Model)" -ForegroundColor Green
+    Write-Host "  Device: $($script:CurrentDevice.Model)" -ForegroundColor Green
     Write-Host ""
-    
+    Write-Host "  ─────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
+    Write-Host ""
+
     $presets = $script:Presets.presets
-    
+
     for ($i = 0; $i -lt $presets.Count; $i++) {
         $preset = $presets[$i]
-        Write-Host "  [$($i + 1)] $($preset.name)" -ForegroundColor Cyan
-        Write-Host "      $($preset.description)" -ForegroundColor Gray
+        Write-Host "  [$($i + 1)] $($preset.name)" -ForegroundColor White
+        Write-Host "      $($preset.description)" -ForegroundColor DarkGray
         Write-Host ""
     }
-    
-    Write-Host "  [0] Return to Main Menu" -ForegroundColor Red
+
+    Write-Host "  [0] Back" -ForegroundColor DarkGray
     Write-Host ""
-    
+
     while ($true) {
-        Write-Host "  Select preset (0-$($presets.Count)): " -ForegroundColor Yellow -NoNewline
+        Write-Host "  Select preset (0-$($presets.Count)): " -ForegroundColor White -NoNewline
         $choice = Read-Host
-        
+
         if ($choice -eq "0") {
             return
         }
-        
+
         $index = [int]$choice - 1
         if ($index -ge 0 -and $index -lt $presets.Count) {
             $preset = $presets[$index]
-            
-            # Reset stats
+
             $script:TransferStats = @{
                 TotalFiles = 0
                 TransferredFiles = 0
@@ -3503,20 +3417,20 @@ function Show-PresetMenu {
                 FailedFiles = 0
                 StartTime = Get-Date
             }
-            
+
             Write-Host ""
-            Write-Host "  [INFO] Starting: $($preset.name)" -ForegroundColor Cyan
-            
+            Write-Host "  Starting: $($preset.name)" -ForegroundColor White
+
             [void](Invoke-Preset -PresetID $preset.id -DeviceID $script:CurrentDevice.ID)
-            
+
             Show-TransferSummary
-            
-            Write-Host "  [Press any key]" -ForegroundColor Yellow
-            $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+
+            Write-Host "  Press Enter to continue..." -ForegroundColor DarkGray -NoNewline
+            $null = Read-Host
             return
         }
         else {
-            Write-Host "  [!] Invalid selection!" -ForegroundColor Red
+            Write-Host "  Invalid selection." -ForegroundColor DarkYellow
         }
     }
 }
@@ -3528,65 +3442,62 @@ function Show-CustomTransferMenu {
     #>
     Clear-Host
     Show-Banner
-    
+
     if (-not $script:CurrentDevice) {
-        Write-Host "  [!] Device selection required" -ForegroundColor Red
+        Write-Host "  ! No device selected. Select a device first." -ForegroundColor Yellow
         Start-Sleep -Seconds 2
         return
     }
-    
-    Write-Host "  ===============================================================" -ForegroundColor Cyan
-    Write-Host "                   CUSTOM DIRECTORY TRANSFER                     " -ForegroundColor Cyan
-    Write-Host "  ===============================================================" -ForegroundColor Cyan
+
+    Write-Host "  Custom Directory Transfer" -ForegroundColor White
     Write-Host ""
-    Write-Host "  Active Device: $($script:CurrentDevice.Model)" -ForegroundColor Green
+    Write-Host "  Device: $($script:CurrentDevice.Model)" -ForegroundColor Green
     Write-Host ""
-    
+    Write-Host "  ─────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
+    Write-Host ""
+
     # Get source path
-    Write-Host "  Source folder path (Android):" -ForegroundColor Yellow
-    Write-Host "  Example: /sdcard/DCIM/Camera/" -ForegroundColor Gray
+    Write-Host "  Source path (Android):" -ForegroundColor White
+    Write-Host "  Example: /sdcard/DCIM/Camera/" -ForegroundColor DarkGray
     Write-Host ""
-    Write-Host "  Path: " -ForegroundColor Yellow -NoNewline
+    Write-Host "  > " -ForegroundColor White -NoNewline
     $sourcePath = Read-Host
-    
+
     if ([string]::IsNullOrWhiteSpace($sourcePath)) {
-        Write-Host "  [!] Invalid path!" -ForegroundColor Red
+        Write-Host "  ! Invalid path." -ForegroundColor Yellow
         Start-Sleep -Seconds 2
         return
     }
-    
+
     # Check if path exists
     if (-not (Test-AndroidPath -DeviceID $script:CurrentDevice.ID -Path $sourcePath)) {
-        Write-Host "  [!] Source path not found: $sourcePath" -ForegroundColor Red
+        Write-Host "  ! Path not found: $sourcePath" -ForegroundColor Yellow
         Start-Sleep -Seconds 2
         return
     }
-    
+
     # Get destination path
     Write-Host ""
-    Write-Host "  Destination folder path (Windows):" -ForegroundColor Yellow
-    Write-Host "  Example: D:\Photos\Phone\" -ForegroundColor Gray
-    Write-Host "  (Leave empty for default: $($script:Config.DefaultDestination))" -ForegroundColor Gray
+    Write-Host "  Destination path (Windows):" -ForegroundColor White
+    Write-Host "  Default: $($script:Config.DefaultDestination)" -ForegroundColor DarkGray
     Write-Host ""
-    Write-Host "  Path: " -ForegroundColor Yellow -NoNewline
+    Write-Host "  > " -ForegroundColor White -NoNewline
     $destPath = Read-Host
-    
+
     if ([string]::IsNullOrWhiteSpace($destPath)) {
         $destPath = $script:Config.DefaultDestination
     }
-    
-    # Recursive option
+
+    # Options
     Write-Host ""
-    Write-Host "  Include subdirectories? (Y/N): " -ForegroundColor Yellow -NoNewline
+    Write-Host "  Include subdirectories? (Y/N): " -ForegroundColor White -NoNewline
     $recursiveChoice = Read-Host
-    $recursive = ($recursiveChoice -eq "Y" -or $recursiveChoice -eq "y")
-    
-    # Verification option
-    Write-Host "  Perform hash verification? (Y/N) [Recommended: Y]: " -ForegroundColor Yellow -NoNewline
+    $recursive = $recursiveChoice.Equals("Y", [System.StringComparison]::OrdinalIgnoreCase)
+
+    Write-Host "  Hash verification? (Y/N) [Y]: " -ForegroundColor White -NoNewline
     $verifyChoice = Read-Host
-    $verify = ($verifyChoice -ne "N" -and $verifyChoice -ne "n")
-    
-    # Reset stats
+    $verify = -not $verifyChoice.Equals("N", [System.StringComparison]::OrdinalIgnoreCase)
+
     $script:TransferStats = @{
         TotalFiles = 0
         TransferredFiles = 0
@@ -3596,19 +3507,18 @@ function Show-CustomTransferMenu {
         FailedFiles = 0
         StartTime = Get-Date
     }
-    
-    # Execute transfer
+
     Write-Host ""
     [void](Copy-AndroidDirectory -DeviceID $script:CurrentDevice.ID `
                                 -SourcePath $sourcePath `
                                 -DestinationPath $destPath `
                                 -Verify:$verify `
                                 -Recursive:$recursive)
-    
+
     Show-TransferSummary
-    
-    Write-Host "  [Press any key]" -ForegroundColor Yellow
-    $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+
+    Write-Host "  Press Enter to continue..." -ForegroundColor DarkGray -NoNewline
+    $null = Read-Host
 }
 
 function Show-Help {
@@ -3618,207 +3528,110 @@ function Show-Help {
     #>
     Clear-Host
     Show-Banner
-    
-    Write-Host "  ===============================================================" -ForegroundColor Cyan
-    Write-Host "                    HELP & DOCUMENTATION                         " -ForegroundColor Cyan
-    Write-Host "  ===============================================================" -ForegroundColor Cyan
+
+    Write-Host "  Help & Documentation" -ForegroundColor White
     Write-Host ""
-    
-    Write-Host "  [1] Quick Start Guide" -ForegroundColor Cyan
-    Write-Host "  [2] Common Android Paths" -ForegroundColor Cyan
-    Write-Host "  [3] Troubleshooting" -ForegroundColor Cyan
-    Write-Host "  [4] Configuration Guide" -ForegroundColor Cyan
-    Write-Host "  [5] Security Features" -ForegroundColor Cyan
-    Write-Host "  [6] About & Credits" -ForegroundColor Cyan
-    Write-Host "  [0] Back to Main Menu" -ForegroundColor Red
+    Write-Host "  ─────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
     Write-Host ""
-    Write-Host "  Select option (0-6): " -ForegroundColor Yellow -NoNewline
+
+    Write-Host "  [1] Quick Start Guide" -ForegroundColor White
+    Write-Host "  [2] Common Android Paths" -ForegroundColor White
+    Write-Host "  [3] Troubleshooting" -ForegroundColor White
+    Write-Host "  [4] Configuration" -ForegroundColor White
+    Write-Host "  [5] About" -ForegroundColor White
+    Write-Host "  [0] Back" -ForegroundColor DarkGray
+    Write-Host ""
+    Write-Host "  > " -ForegroundColor White -NoNewline
     $choice = Read-Host
-    
+
     Clear-Host
     Show-Banner
-    
+
     switch ($choice) {
         "1" {
-            Write-Host "  ===============================================================" -ForegroundColor Green
-            Write-Host "                       QUICK START GUIDE                         " -ForegroundColor Green
-            Write-Host "  ===============================================================" -ForegroundColor Green
+            Write-Host "  Quick Start Guide" -ForegroundColor White
             Write-Host ""
-            Write-Host "  STEP 1: Device Connection" -ForegroundColor Yellow
-            Write-Host "  - Connect Android device via USB" -ForegroundColor White
-            Write-Host "  - Enable USB Debugging (Settings > Developer Options)" -ForegroundColor White
-            Write-Host "  - Accept 'Allow USB debugging' prompt on device" -ForegroundColor White
+            Write-Host "  1. Connect Android device via USB" -ForegroundColor DarkGray
+            Write-Host "  2. Enable USB Debugging (Settings > Developer Options)" -ForegroundColor DarkGray
+            Write-Host "  3. Accept 'Allow USB debugging' prompt on device" -ForegroundColor DarkGray
+            Write-Host "  4. Main Menu > [1] Select Device" -ForegroundColor DarkGray
+            Write-Host "  5. Choose Quick Transfer [2] or Custom Transfer [3]" -ForegroundColor DarkGray
             Write-Host ""
-            Write-Host "  STEP 2: Device Selection" -ForegroundColor Yellow
-            Write-Host "  - Main Menu > [1] Select Device" -ForegroundColor White
-            Write-Host "  - Select device from list" -ForegroundColor White
-            Write-Host ""
-            Write-Host "  STEP 3: File Transfer" -ForegroundColor Yellow
-            Write-Host "  - Option A: Quick Transfer (Presets) - [2]" -ForegroundColor White
-            Write-Host "    Camera, WhatsApp, Downloads, etc." -ForegroundColor Gray
-            Write-Host "  - Option B: Custom Transfer - [3]" -ForegroundColor White
-            Write-Host "    Any folder with custom settings" -ForegroundColor Gray
-            Write-Host ""
-            Write-Host "  FEATURES:" -ForegroundColor Yellow
-            Write-Host "  [+] Automatic hash verification (MD5/SHA256)" -ForegroundColor Green
-            Write-Host "  [+] Resume capability - skip existing files" -ForegroundColor Green
-            Write-Host "  [+] READ-ONLY access - device files stay safe" -ForegroundColor Green
-            Write-Host "  [+] Detailed logging for troubleshooting" -ForegroundColor Green
+            Write-Host "  Features:" -ForegroundColor White
+            Write-Host "    + Automatic hash verification (MD5/SHA256)" -ForegroundColor DarkGray
+            Write-Host "    + Resume capability - skips existing files" -ForegroundColor DarkGray
+            Write-Host "    + READ-ONLY access - device files stay safe" -ForegroundColor DarkGray
+            Write-Host "    + Detailed logging for troubleshooting" -ForegroundColor DarkGray
         }
         "2" {
-            Write-Host "  ===============================================================" -ForegroundColor Green
-            Write-Host "                    COMMON ANDROID PATHS                         " -ForegroundColor Green
-            Write-Host "  ===============================================================" -ForegroundColor Green
+            Write-Host "  Common Android Paths" -ForegroundColor White
             Write-Host ""
-            Write-Host "  PHOTOS & VIDEOS:" -ForegroundColor Yellow
-            Write-Host "  /sdcard/DCIM/Camera/             - Camera photos/videos" -ForegroundColor White
-            Write-Host "  /sdcard/Pictures/                - All pictures" -ForegroundColor White
-            Write-Host "  /sdcard/Pictures/Screenshots/    - Screenshots" -ForegroundColor White
-            Write-Host "  /sdcard/Movies/                  - Video files" -ForegroundColor White
+            Write-Host "  Photos & Videos:" -ForegroundColor White
+            Write-Host "    /sdcard/DCIM/Camera/            Camera photos/videos" -ForegroundColor DarkGray
+            Write-Host "    /sdcard/Pictures/               All pictures" -ForegroundColor DarkGray
+            Write-Host "    /sdcard/Pictures/Screenshots/   Screenshots" -ForegroundColor DarkGray
+            Write-Host "    /sdcard/Movies/                 Video files" -ForegroundColor DarkGray
             Write-Host ""
-            Write-Host "  MESSAGING APPS:" -ForegroundColor Yellow
-            Write-Host "  /sdcard/WhatsApp/Media/          - WhatsApp (Android <11)" -ForegroundColor White
-            Write-Host "  /sdcard/Android/media/com.whatsapp/WhatsApp/ - WhatsApp (Android 11+)" -ForegroundColor White
-            Write-Host "  /sdcard/Telegram/                - Telegram files" -ForegroundColor White
+            Write-Host "  Messaging:" -ForegroundColor White
+            Write-Host "    /sdcard/WhatsApp/Media/         WhatsApp (<Android 11)" -ForegroundColor DarkGray
+            Write-Host "    /sdcard/Android/media/com.whatsapp/WhatsApp/  (Android 11+)" -ForegroundColor DarkGray
+            Write-Host "    /sdcard/Telegram/               Telegram files" -ForegroundColor DarkGray
             Write-Host ""
-            Write-Host "  OTHER:" -ForegroundColor Yellow
-            Write-Host "  /sdcard/Download/                - Downloads" -ForegroundColor White
-            Write-Host "  /sdcard/Music/                   - Music files" -ForegroundColor White
-            Write-Host "  /sdcard/Documents/               - Documents" -ForegroundColor White
-            Write-Host "  /sdcard/Android/data/            - App data" -ForegroundColor White
+            Write-Host "  Other:" -ForegroundColor White
+            Write-Host "    /sdcard/Download/               Downloads" -ForegroundColor DarkGray
+            Write-Host "    /sdcard/Music/                  Music" -ForegroundColor DarkGray
+            Write-Host "    /sdcard/Documents/              Documents" -ForegroundColor DarkGray
         }
         "3" {
-            Write-Host "  ===============================================================" -ForegroundColor Green
-            Write-Host "                        TROUBLESHOOTING                          " -ForegroundColor Green
-            Write-Host "  ===============================================================" -ForegroundColor Green
+            Write-Host "  Troubleshooting" -ForegroundColor White
             Write-Host ""
-            Write-Host "  DEVICE NOT FOUND:" -ForegroundColor Yellow
-            Write-Host "  [*] Check USB cable is connected" -ForegroundColor White
-            Write-Host "  [*] Enable USB Debugging on device" -ForegroundColor White
-            Write-Host "  [*] Accept 'Allow USB debugging' prompt" -ForegroundColor White
-            Write-Host "  [*] Try different USB port (USB 2.0 recommended)" -ForegroundColor White
-            Write-Host "  [*] Check logs: .\logs\transfer_*.log" -ForegroundColor Gray
+            Write-Host "  Device not found:" -ForegroundColor White
+            Write-Host "    - Check USB cable connection" -ForegroundColor DarkGray
+            Write-Host "    - Enable USB Debugging on device" -ForegroundColor DarkGray
+            Write-Host "    - Accept 'Allow USB debugging' prompt" -ForegroundColor DarkGray
+            Write-Host "    - Try different USB port (USB 2.0 recommended)" -ForegroundColor DarkGray
+            Write-Host "    - Run: adb kill-server && adb start-server" -ForegroundColor DarkGray
             Write-Host ""
-            Write-Host "  TRANSFER FAILED:" -ForegroundColor Yellow
-            Write-Host "  [*] Check available disk space" -ForegroundColor White
-            Write-Host "  [*] Ensure files not locked by another app" -ForegroundColor White
-            Write-Host "  [*] Keep device awake during transfer" -ForegroundColor White
-            Write-Host "  [*] Review error logs for details" -ForegroundColor White
+            Write-Host "  Transfer failed:" -ForegroundColor White
+            Write-Host "    - Check available disk space" -ForegroundColor DarkGray
+            Write-Host "    - Keep device awake during transfer" -ForegroundColor DarkGray
+            Write-Host "    - Review logs: $($script:LogDir)" -ForegroundColor DarkGray
             Write-Host ""
-            Write-Host "  SLOW TRANSFERS:" -ForegroundColor Yellow
-            Write-Host "  [*] Use USB 3.0 cable and port" -ForegroundColor White
-            Write-Host "  [*] Disable hash verification for large files" -ForegroundColor White
-            Write-Host "  [*] Use MD5 instead of SHA256 (faster)" -ForegroundColor White
-            Write-Host "  [*] Settings > HashAlgorithm: 'MD5'" -ForegroundColor Gray
-            Write-Host ""
-            Write-Host "  LOG FILES LOCATION:" -ForegroundColor Yellow
-            Write-Host "  .\logs\transfer_*.log            - Transfer logs" -ForegroundColor White
-            Write-Host "  .\logs\security_audit_*.log      - Security events" -ForegroundColor White
+            Write-Host "  Slow transfers:" -ForegroundColor White
+            Write-Host "    - Use USB 3.0 cable and port" -ForegroundColor DarkGray
+            Write-Host "    - Use MD5 instead of SHA256 (Settings)" -ForegroundColor DarkGray
         }
         "4" {
-            Write-Host "  ===============================================================" -ForegroundColor Green
-            Write-Host "                     CONFIGURATION GUIDE                         " -ForegroundColor Green
-            Write-Host "  ===============================================================" -ForegroundColor Green
+            Write-Host "  Configuration" -ForegroundColor White
             Write-Host ""
-            Write-Host "  Config File: .\config\settings.json" -ForegroundColor Cyan
+            Write-Host "  Config file: $($script:ConfigDir)\settings.json" -ForegroundColor DarkGray
             Write-Host ""
-            Write-Host "  KEY SETTINGS:" -ForegroundColor Yellow
-            Write-Host ""
-            Write-Host "  AlwaysVerifyHash: true/false" -ForegroundColor White
-            Write-Host "  -> Verify file integrity after transfer" -ForegroundColor Gray
-            Write-Host ""
-            Write-Host "  HashAlgorithm: 'MD5' or 'SHA256'" -ForegroundColor White
-            Write-Host "  -> MD5: Faster (recommended)" -ForegroundColor Gray
-            Write-Host "  -> SHA256: More secure but slower" -ForegroundColor Gray
-            Write-Host ""
-            Write-Host "  SmallFileThreshold: 104857600 (100MB)" -ForegroundColor White
-            Write-Host "  -> Files under this skip hash verification" -ForegroundColor Gray
-            Write-Host ""
-            Write-Host "  MaxRetries: 3" -ForegroundColor White
-            Write-Host "  -> Number of retry attempts for failed transfers" -ForegroundColor Gray
-            Write-Host ""
-            Write-Host "  EnableParallelTransfer: false" -ForegroundColor White
-            Write-Host "  -> EXPERIMENTAL: Parallel transfers for small files" -ForegroundColor Gray
-            Write-Host "  -> Default: false (sequential is more stable)" -ForegroundColor Gray
-            Write-Host ""
-            Write-Host "  SanitizePaths: true" -ForegroundColor White
-            Write-Host "  -> Security: Command injection protection" -ForegroundColor Gray
-            Write-Host "  -> KEEP THIS TRUE!" -ForegroundColor Red
+            Write-Host "  AlwaysVerifyHash    true/false   Verify integrity after transfer" -ForegroundColor DarkGray
+            Write-Host "  HashAlgorithm       MD5/SHA256   MD5 faster, SHA256 more secure" -ForegroundColor DarkGray
+            Write-Host "  MaxRetries          3            Retry attempts for failed transfers" -ForegroundColor DarkGray
+            Write-Host "  SmallFileThreshold  100MB        Skip hash for files under this" -ForegroundColor DarkGray
+            Write-Host "  SanitizePaths       true         Command injection protection" -ForegroundColor DarkGray
         }
         "5" {
-            Write-Host "  ===============================================================" -ForegroundColor Green
-            Write-Host "                      SECURITY FEATURES                          " -ForegroundColor Green
-            Write-Host "  ===============================================================" -ForegroundColor Green
+            Write-Host "  About" -ForegroundColor White
             Write-Host ""
-            Write-Host "  THIS TOOL IMPLEMENTS:" -ForegroundColor Yellow
+            Write-Host "  adbData v$($script:Version)" -ForegroundColor DarkGray
+            Write-Host "  High-performance Android file transfer via ADB" -ForegroundColor DarkGray
             Write-Host ""
-            Write-Host "  [+] Command Injection Protection" -ForegroundColor Green
-            Write-Host "     -> Whitelist validation, shell escaping" -ForegroundColor Gray
-            Write-Host ""
-            Write-Host "  [+] Path Traversal Prevention" -ForegroundColor Green
-            Write-Host "     -> 10+ attack patterns blocked (.., %2e%2e, etc.)" -ForegroundColor Gray
-            Write-Host ""
-            Write-Host "  [+] ADB Binary Integrity Check" -ForegroundColor Green
-            Write-Host "     -> SHA256 hash verification" -ForegroundColor Gray
-            Write-Host ""
-            Write-Host "  [+] Race Condition Protection" -ForegroundColor Green
-            Write-Host "     -> Exclusive file locking, atomic operations" -ForegroundColor Gray
-            Write-Host ""
-            Write-Host "  [+] Memory Security" -ForegroundColor Green
-            Write-Host "     -> Secure data wiping, forced garbage collection" -ForegroundColor Gray
-            Write-Host ""
-            Write-Host "  [+] Rate Limiting" -ForegroundColor Green
-            Write-Host "     -> DoS protection: 50/sec, 1000/min" -ForegroundColor Gray
-            Write-Host ""
-            Write-Host "  [+] Comprehensive Audit Logging" -ForegroundColor Green
-            Write-Host "     -> Structured JSONL logs, security event alerts" -ForegroundColor Gray
-            Write-Host ""
-            Write-Host "  [+] READ-ONLY Device Access" -ForegroundColor Green
-            Write-Host "     -> Never modifies files on Android device" -ForegroundColor Gray
-            Write-Host ""
-            Write-Host "  [+] Hash Verification" -ForegroundColor Green
-            Write-Host "     -> Timing-safe comparison, zero data loss" -ForegroundColor Gray
-        }
-        "6" {
-            Write-Host "  ===============================================================" -ForegroundColor Green
-            Write-Host "                       ABOUT & CREDITS                           " -ForegroundColor Green
-            Write-Host "  ===============================================================" -ForegroundColor Green
-            Write-Host ""
-            Write-Host "  adbData v$($script:Version)" -ForegroundColor Cyan
-            Write-Host ""
-            Write-Host "  DESCRIPTION:" -ForegroundColor Yellow
-            Write-Host "  High-performance Android file transfer via ADB" -ForegroundColor White
-            Write-Host "  via ADB with integrity verification and security features." -ForegroundColor White
-            Write-Host ""
-            Write-Host "  DEVELOPER:" -ForegroundColor Yellow
-            Write-Host "  Bugra" -ForegroundColor White
-            Write-Host ""
-            Write-Host "  AI ASSISTANT:" -ForegroundColor Yellow
-            Write-Host "  Claude Sonnet 4.5 (Anthropic)" -ForegroundColor White
-            Write-Host ""
-            Write-Host "  ADB:" -ForegroundColor Yellow
-            Write-Host "  Google Android Platform Tools" -ForegroundColor White
-            Write-Host ""
-            Write-Host "  LICENSE:" -ForegroundColor Yellow
-            Write-Host "  MIT License - Free to use, modify, and distribute" -ForegroundColor White
-            Write-Host ""
-            Write-Host "  FEATURES:" -ForegroundColor Yellow
-            Write-Host "  * Hash verification (MD5/SHA256)" -ForegroundColor White
-            Write-Host "  * Resume capability & incremental transfers" -ForegroundColor White
-            Write-Host "  * Security: injection protection, audit logging" -ForegroundColor White
-            Write-Host "  * Session tracking & transfer history" -ForegroundColor White
-            Write-Host "  * Smart presets for common scenarios" -ForegroundColor White
-            Write-Host "  * Parallel transfers (experimental)" -ForegroundColor White
+            Write-Host "  Developer: Bugra" -ForegroundColor DarkGray
+            Write-Host "  AI: Claude Sonnet 4.5 (Anthropic)" -ForegroundColor DarkGray
+            Write-Host "  License: MIT" -ForegroundColor DarkGray
         }
         default {
             return
         }
     }
-    
+
     Write-Host ""
-    Write-Host "  ===============================================================" -ForegroundColor Cyan
+    Write-Host "  ─────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
     Write-Host ""
-    Read-Host "  [Press Enter]"
+    Write-Host "  Press Enter to continue..." -ForegroundColor DarkGray -NoNewline
+    $null = Read-Host
 }
 
 function Show-DeviceInfo {
@@ -3828,59 +3641,48 @@ function Show-DeviceInfo {
     #>
     Clear-Host
     Show-Banner
-    
+
     if (-not $script:CurrentDevice) {
-        Write-Host "  [!] Device selection required" -ForegroundColor Red
+        Write-Host "  ! No device selected. Select a device first." -ForegroundColor Yellow
         Start-Sleep -Seconds 2
         return
     }
-    
-    Write-Host "  ===============================================================" -ForegroundColor Cyan
-    Write-Host "                       DEVICE INFORMATION                        " -ForegroundColor Cyan
-    Write-Host "  ===============================================================" -ForegroundColor Cyan
+
+    Write-Host "  Device Information" -ForegroundColor White
     Write-Host ""
-    
-    Write-Host "  BASIC INFORMATION:" -ForegroundColor Yellow
-    Write-Host "  ------------------" -ForegroundColor Gray
-    Write-Host "     Model            : $($script:CurrentDevice.Model)" -ForegroundColor White
-    Write-Host "     Product          : $($script:CurrentDevice.Product)" -ForegroundColor White
-    Write-Host "     ID               : $($script:CurrentDevice.ID)" -ForegroundColor White
-    Write-Host "     Connection       : $($script:CurrentDevice.Transport)" -ForegroundColor White
+    Write-Host "  ─────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
     Write-Host ""
-    
+    Write-Host "    Model         $($script:CurrentDevice.Model)" -ForegroundColor DarkGray
+    Write-Host "    Product       $($script:CurrentDevice.Product)" -ForegroundColor DarkGray
+    Write-Host "    ID            $($script:CurrentDevice.ID)" -ForegroundColor DarkGray
+    Write-Host "    Connection    $($script:CurrentDevice.Transport)" -ForegroundColor DarkGray
+    Write-Host ""
+
     # Get Android version
     $androidInfo = Get-AndroidVersion -DeviceID $script:CurrentDevice.ID
-    
+
     if ($androidInfo) {
-        Write-Host "  ANDROID INFORMATION:" -ForegroundColor Yellow
-        Write-Host "  --------------------" -ForegroundColor Gray
-        Write-Host "     Android Version  : $($androidInfo.Version)" -ForegroundColor White
-        Write-Host "     SDK Level        : $($androidInfo.SDK)" -ForegroundColor White
-        Write-Host "     Scoped Storage   : $(if ($androidInfo.HasScopedStorage) { 'Yes (Android 11+)' } else { 'No' })" -ForegroundColor White
+        Write-Host "    Android       $($androidInfo.Version) (SDK $($androidInfo.SDK))" -ForegroundColor DarkGray
+        Write-Host "    Scoped Storage  $(if ($androidInfo.HasScopedStorage) { 'Yes (Android 11+)' } else { 'No' })" -ForegroundColor DarkGray
         Write-Host ""
     }
-    
+
     # Get storage info
     try {
-        $storageInfo = & $script:ADB -s $script:CurrentDevice.ID shell "df /sdcard" 2>&1 | Select-Object -Skip 1
-        Write-Host "  STORAGE INFORMATION:" -ForegroundColor Yellow
-        Write-Host "  --------------------" -ForegroundColor Gray
-        Write-Host "     $storageInfo" -ForegroundColor White
+        $storageInfo = & $script:ADB -s $script:CurrentDevice.ID shell "df -h /sdcard" 2>&1 | Select-Object -Skip 1
+        Write-Host "    Storage       $($storageInfo.Trim())" -ForegroundColor DarkGray
     }
     catch {
-        Write-Host "  [!] Could not retrieve storage information" -ForegroundColor Yellow
+        Write-Host "    Storage       Unable to retrieve" -ForegroundColor DarkGray
     }
-    
+
     Write-Host ""
-    Write-Host "  DEVICE ACCESS MODE:" -ForegroundColor Green
-    Write-Host "  -------------------" -ForegroundColor Gray
-    Write-Host "  * READ-ONLY access to Android device" -ForegroundColor Green
-    Write-Host "  * Device files are NEVER modified, deleted, or moved" -ForegroundColor Green
-    Write-Host "  * Safe to use - only copies files to PC" -ForegroundColor Green
-    
+    Write-Host "  Access mode: READ-ONLY (device files never modified)" -ForegroundColor Green
     Write-Host ""
-    Write-Host "  [Press any key]" -ForegroundColor Yellow
-    $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+    Write-Host "  ─────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
+    Write-Host ""
+    Write-Host "  Press Enter to continue..." -ForegroundColor DarkGray -NoNewline
+    $null = Read-Host
 }
 
 function Show-Settings {
@@ -3890,48 +3692,44 @@ function Show-Settings {
     #>
     Clear-Host
     Show-Banner
-    
-    Write-Host "  ===============================================================" -ForegroundColor Cyan
-    Write-Host "                          SETTINGS                               " -ForegroundColor Cyan
-    Write-Host "  ===============================================================" -ForegroundColor Cyan
+
+    Write-Host "  Settings" -ForegroundColor White
     Write-Host ""
-    
-    Write-Host "  Current Settings:" -ForegroundColor Yellow
+    Write-Host "  ─────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
     Write-Host ""
-    Write-Host "  1. Default Destination     : $($script:Config.DefaultDestination)" -ForegroundColor White
-    Write-Host "  2. Hash Verification       : $(if ($script:Config.AlwaysVerifyHash) { 'Enabled' } else { 'Disabled' })" -ForegroundColor White
-    Write-Host "  3. Hash Algorithm          : $($script:Config.HashAlgorithm)" -ForegroundColor White
-    Write-Host "  4. Maximum Retries         : $($script:Config.MaxRetries)" -ForegroundColor White
-    Write-Host "  5. Progress Bar            : $(if ($script:Config.ShowProgressBar) { 'Enabled' } else { 'Disabled' })" -ForegroundColor White
+    Write-Host "  [1] Default destination   $($script:Config.DefaultDestination)" -ForegroundColor DarkGray
+    Write-Host "  [2] Hash verification     $(if ($script:Config.AlwaysVerifyHash) { 'Enabled' } else { 'Disabled' })" -ForegroundColor DarkGray
+    Write-Host "  [3] Hash algorithm        $($script:Config.HashAlgorithm)" -ForegroundColor DarkGray
+    Write-Host "  [4] Max retries           $($script:Config.MaxRetries)" -ForegroundColor DarkGray
+    Write-Host "  [5] Progress bar          $(if ($script:Config.ShowProgressBar) { 'Enabled' } else { 'Disabled' })" -ForegroundColor DarkGray
     Write-Host ""
-    Write-Host "  [0] Go Back" -ForegroundColor Red
+    Write-Host "  [0] Back" -ForegroundColor DarkGray
     Write-Host ""
-    Write-Host "  Select number to change (0-5): " -ForegroundColor Yellow -NoNewline
+    Write-Host "  > " -ForegroundColor White -NoNewline
     $choice = Read-Host
-    
+
     switch ($choice) {
         "1" {
             Write-Host ""
-            Write-Host "  New default destination folder: " -ForegroundColor Yellow -NoNewline
+            Write-Host "  New default destination: " -ForegroundColor White -NoNewline
             $newPath = Read-Host
             if (-not [string]::IsNullOrWhiteSpace($newPath)) {
                 $script:Config.DefaultDestination = $newPath
                 Save-Config
-                Write-Host "  [OK] Setting saved" -ForegroundColor Green
+                Write-Host "  * Saved" -ForegroundColor Green
                 Start-Sleep -Seconds 1
             }
         }
         "2" {
             $script:Config.AlwaysVerifyHash = -not $script:Config.AlwaysVerifyHash
             Save-Config
-            Write-Host "  [OK] Hash verification: $(if ($script:Config.AlwaysVerifyHash) { 'Enabled' } else { 'Disabled' })" -ForegroundColor Green
+            Write-Host "  * Hash verification: $(if ($script:Config.AlwaysVerifyHash) { 'Enabled' } else { 'Disabled' })" -ForegroundColor Green
             Start-Sleep -Seconds 1
         }
         "3" {
             Write-Host ""
-            Write-Host "  [1] MD5 (Fast)" -ForegroundColor Cyan
-            Write-Host "  [2] SHA256 (Secure)" -ForegroundColor Cyan
-            Write-Host "  Choice: " -ForegroundColor Yellow -NoNewline
+            Write-Host "  [1] MD5 (fast)  [2] SHA256 (secure)" -ForegroundColor DarkGray
+            Write-Host "  > " -ForegroundColor White -NoNewline
             $algoChoice = Read-Host
             if ($algoChoice -eq "1") {
                 $script:Config.HashAlgorithm = "MD5"
@@ -3939,50 +3737,45 @@ function Show-Settings {
                 $script:Config.HashAlgorithm = "SHA256"
             }
             Save-Config
-            Write-Host "  [OK] Algorithm: $($script:Config.HashAlgorithm)" -ForegroundColor Green
+            Write-Host "  * Algorithm: $($script:Config.HashAlgorithm)" -ForegroundColor Green
             Start-Sleep -Seconds 1
         }
         "0" { return }
     }
-    
+
     Show-Settings
 }
 
 function Show-MainMenu {
     <#
     .SYNOPSIS
-        Shows main menu
+        Shows main menu with modern CLI aesthetic
     #>
     Clear-Host
     Show-Banner
-    
-    Write-Host "  ============================================================================" -ForegroundColor Cyan
-    Write-Host "                                MAIN MENU                                   " -ForegroundColor Cyan
-    Write-Host "  ============================================================================" -ForegroundColor Cyan
-    Write-Host ""
-    Write-Host "  [1] Select Device                                                          " -ForegroundColor Cyan
-    Write-Host "  [2] Quick Transfer (Presets)                                               " -ForegroundColor Cyan
-    Write-Host "  [3] Custom Directory Transfer                                              " -ForegroundColor Cyan
-    Write-Host "  [4] Settings                                                               " -ForegroundColor Cyan
-    Write-Host "  [5] Device Information                                                     " -ForegroundColor Cyan
-    Write-Host "  [6] Help & Documentation                                                   " -ForegroundColor Cyan
-    Write-Host "  [0] Exit                                                                   " -ForegroundColor Cyan
-    Write-Host ""
-    Write-Host "  ============================================================================" -ForegroundColor Cyan
-    Write-Host ""
-    
+
     if ($script:CurrentDevice) {
-        Write-Host "  [CONNECTED] Active Device: $($script:CurrentDevice.Model)" -ForegroundColor Green
-        Write-Host "  [MODE] READ-ONLY access - Device files protected" -ForegroundColor Green
+        Write-Host "  * $($script:CurrentDevice.Model) connected (READ-ONLY)" -ForegroundColor Green
     }
     else {
-        Write-Host "  [WARNING] No Device Selected" -ForegroundColor Yellow
+        Write-Host "  ! No device selected" -ForegroundColor Yellow
     }
-    
+
     Write-Host ""
-    Write-Host "  Select option (0-6): " -ForegroundColor Yellow -NoNewline
+    Write-Host "  ─────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
+    Write-Host ""
+    Write-Host "  [1] Select Device" -ForegroundColor White
+    Write-Host "  [2] Quick Transfer (Presets)" -ForegroundColor White
+    Write-Host "  [3] Custom Transfer" -ForegroundColor White
+    Write-Host "  [4] Settings" -ForegroundColor White
+    Write-Host "  [5] Device Info" -ForegroundColor White
+    Write-Host "  [6] Help" -ForegroundColor White
+    Write-Host ""
+    Write-Host "  [0] Exit" -ForegroundColor DarkGray
+    Write-Host ""
+    Write-Host "  > " -ForegroundColor White -NoNewline
     $choice = Read-Host
-    
+
     switch ($choice) {
         "1" { Show-DeviceSelection }
         "2" { Show-PresetMenu }
@@ -3990,15 +3783,15 @@ function Show-MainMenu {
         "4" { Show-Settings }
         "5" { Show-DeviceInfo }
         "6" { Show-Help }
-        "0" { 
+        "0" {
             Write-Host ""
-            Write-Host "  [INFO] Exiting..." -ForegroundColor Cyan
+            Write-Host "  Goodbye." -ForegroundColor DarkGray
             Clear-TempFiles
             Write-Log "Session ended" -Level INFO
             exit 0
         }
         default {
-            Write-Host "  [!] Invalid selection!" -ForegroundColor Red
+            Write-Host "  Invalid selection." -ForegroundColor DarkYellow
             Start-Sleep -Seconds 1
         }
     }
@@ -4014,52 +3807,40 @@ function Invoke-FirstRunSetup {
         Runs first-time setup wizard
     #>
     Clear-Host
+    Show-Banner
+
+    Write-Host "  First Run Setup" -ForegroundColor White
     Write-Host ""
-    Write-Host "================================================================================" -ForegroundColor Cyan
-    Write-Host "                                                                                " -ForegroundColor Cyan
-    Write-Host "                         FIRST RUN SETUP WIZARD                                 " -ForegroundColor Cyan
-    Write-Host "                                                                                " -ForegroundColor Cyan
-    Write-Host "================================================================================" -ForegroundColor Cyan
+    Write-Host "  ─────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
     Write-Host ""
-    
-    Write-Host "  Initial configuration required.`n" -ForegroundColor White
-    
-    # Set default destination
-    Write-Host "  ============================================================================" -ForegroundColor Yellow
-    Write-Host "                         Default Transfer Folder                              " -ForegroundColor Yellow
-    Write-Host "  ============================================================================" -ForegroundColor Yellow
+    Write-Host "  Choose default transfer destination:" -ForegroundColor White
     Write-Host ""
-    Write-Host "  [1] Desktop" -ForegroundColor Cyan
-    Write-Host "  [2] Documents" -ForegroundColor Cyan
-    Write-Host "  [3] Downloads" -ForegroundColor Cyan
+    Write-Host "  [1] Desktop" -ForegroundColor DarkGray
+    Write-Host "  [2] Documents" -ForegroundColor DarkGray
+    Write-Host "  [3] Downloads" -ForegroundColor DarkGray
     Write-Host ""
-    Write-Host "  Select option (1-3): " -ForegroundColor Yellow -NoNewline
+    Write-Host "  > " -ForegroundColor White -NoNewline
     $choice = Read-Host
-    
+
     $defaultDest = switch ($choice) {
         "1" { [Environment]::GetFolderPath("Desktop") + "\adbData" }
         "2" { [Environment]::GetFolderPath("MyDocuments") + "\adbData" }
         "3" { [Environment]::GetFolderPath("UserProfile") + "\Downloads\adbData" }
         default { [Environment]::GetFolderPath("Desktop") + "\adbData" }
     }
-    
+
     $script:Config.DefaultDestination = $defaultDest
     $script:Config.FirstRunComplete = $true
     Save-Config
-    
+
     Write-Host ""
-    Write-Host "  [OK] Default folder: $defaultDest" -ForegroundColor Green
+    Write-Host "  * Default folder: $defaultDest" -ForegroundColor Green
+    Write-Host "  * Access mode: READ-ONLY (device files never modified)" -ForegroundColor Green
     Write-Host ""
-    Write-Host "  ============================================================================" -ForegroundColor Green
-    Write-Host "                            SETUP COMPLETED                                   " -ForegroundColor Green
-    Write-Host "  ============================================================================" -ForegroundColor Green
+    Write-Host "  Setup complete." -ForegroundColor White
     Write-Host ""
-    Write-Host "  Transfer operations now available." -ForegroundColor White
-    Write-Host "  Note: READ-ONLY access mode enforced." -ForegroundColor Green
-    Write-Host "  Device files are never modified, deleted, or moved." -ForegroundColor Green
-    Write-Host ""
-    Write-Host "  [Press Enter to return]" -ForegroundColor Yellow
-    Read-Host
+    Write-Host "  Press Enter to continue..." -ForegroundColor DarkGray -NoNewline
+    $null = Read-Host
 }
 
 # ============================================================================
@@ -4083,38 +3864,28 @@ function Start-adbData {
         if (-not (Test-ADBInstallation)) {
             Clear-Host
             Write-Host ""
-            Write-Host "===============================================================================" -ForegroundColor Red
-            Write-Host "                              ADB NOT FOUND!                                   " -ForegroundColor Red
-            Write-Host "===============================================================================" -ForegroundColor Red
+            Write-Host "  adbData" -ForegroundColor White -NoNewline
+            Write-Host " - ADB not found" -ForegroundColor Red
             Write-Host ""
-            Write-Host "  Android Debug Bridge (ADB) is not installed or could not be found." -ForegroundColor Yellow
+            Write-Host "  ─────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
             Write-Host ""
-            Write-Host "  Installation options:" -ForegroundColor White
+            Write-Host "  Android Debug Bridge (ADB) is required but not found." -ForegroundColor DarkGray
             Write-Host ""
-            Write-Host "  1. Download Platform Tools and extract to 'platform-tools' folder:" -ForegroundColor Cyan
-            Write-Host "     https://developer.android.com/studio/releases/platform-tools" -ForegroundColor Gray
+            Write-Host "  Options:" -ForegroundColor White
+            Write-Host "    1. Download Platform Tools to 'platform-tools' folder:" -ForegroundColor DarkGray
+            Write-Host "       https://developer.android.com/studio/releases/platform-tools" -ForegroundColor DarkGray
+            Write-Host "    2. Install Android Studio and add to system PATH" -ForegroundColor DarkGray
             Write-Host ""
-            Write-Host "  2. Or install Android Studio and add to system PATH" -ForegroundColor Cyan
-            Write-Host ""
-            Write-Host "  After installation, run the script again." -ForegroundColor Yellow
-            Write-Host ""
-            Write-Host "===============================================================================" -ForegroundColor Red
-            Write-Host ""
-            Read-Host "  [Press Enter to exit]"
+            Write-Host "  Press Enter to exit..." -ForegroundColor DarkGray -NoNewline
+            $null = Read-Host
             exit 1
         }
         
-        # Show banner
-        Show-Banner
-        
-        # Show disclaimer (first time or always)
+        # Show disclaimer (includes banner)
         if (-not (Show-Disclaimer)) {
             Write-Log "User declined to proceed" -Level INFO
             exit 0
         }
-        
-        # Show script info
-        Show-ScriptInfo
         
         # First run setup
         if (-not $script:Config.FirstRunComplete) {
@@ -4157,10 +3928,11 @@ function Start-adbData {
     catch {
         Write-Log "Fatal error: $($_.Exception.Message)" -Level ERROR
         Write-Host ""
-        Write-Host "  [ERROR] Critical error occurred: $($_.Exception.Message)" -ForegroundColor Red
-        Write-Host "  Log file: $($script:LogFile)" -ForegroundColor Gray
+        Write-Host "  ! Critical error: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host "  Log: $($script:LogFile)" -ForegroundColor DarkGray
         Write-Host ""
-        Read-Host "  Press Enter to exit"
+        Write-Host "  Press Enter to exit..." -ForegroundColor DarkGray -NoNewline
+        $null = Read-Host
         exit 1
     }
     finally {
