@@ -3277,9 +3277,9 @@ function Show-DeviceSelection {
         if ($retry -lt $maxRetries) {
             Write-Host "  Retry $retry/$maxRetries - Restarting ADB server..." -ForegroundColor DarkYellow
             $null = & $script:ADB kill-server 2>&1
-            Start-Sleep -Milliseconds 1000
+            Start-Sleep -Milliseconds 500
             $null = & $script:ADB start-server 2>&1
-            Start-Sleep -Milliseconds 2000
+            Start-Sleep -Milliseconds 1500
         }
     }
 
@@ -3670,9 +3670,9 @@ function Show-DeviceInfo {
 
     # Get storage info
     try {
-        $storageInfo = & $script:ADB -s $script:CurrentDevice.ID shell "df /sdcard" 2>&1 | Select-Object -Skip 1
-        $storageText = if ($storageInfo -is [System.Array]) { $storageInfo -join " " } else { [string]$storageInfo }
-        Write-Host "    Storage       $($storageText.Trim())" -ForegroundColor DarkGray
+        $storageInfo = & $script:ADB -s $script:CurrentDevice.ID shell "df -h /sdcard" 2>&1 | Select-Object -Skip 1
+        $storageText = if ($storageInfo -is [System.Array]) { ($storageInfo | Select-Object -First 1).Trim() } else { ([string]$storageInfo).Trim() }
+        Write-Host "    Storage       $storageText" -ForegroundColor DarkGray
     }
     catch {
         Write-Host "    Storage       Unable to retrieve" -ForegroundColor DarkGray
