@@ -64,7 +64,7 @@ SOFTWARE.
 # CONFIGURATION SECTION
 # ============================================================================
 
-$script:Version = "1.0.0"
+$script:Version = "1.1.0"
 $script:ScriptRoot = $PSScriptRoot
 $script:SessionID = (Get-Date -Format "yyyyMMdd_HHmmss")
 
@@ -295,6 +295,9 @@ function Invoke-ADBPullUTF8 {
     <#
     .SYNOPSIS
         Executes ADB pull command with proper UTF-8 encoding handling
+    .DESCRIPTION
+        Handles non-ASCII characters (Turkish, accented, CJK, emoji, special symbols)
+        in both source and destination paths. Uses cmd /c with chcp 65001 for UTF-8.
     #>
     param(
         [Parameter(Mandatory=$true)]
@@ -308,8 +311,12 @@ function Invoke-ADBPullUTF8 {
     )
     
     try {
+        # Escape double quotes in paths to prevent command injection
+        $safeSource = $SourcePath -replace '"', '\"'
+        $safeDest = $DestinationPath -replace '"', '\"'
+        
         # Use cmd /c with chcp 65001 to ensure UTF-8 path handling
-        $cmdArgs = "/c chcp 65001 >nul && `"$($script:ADB)`" -s $DeviceID pull `"$SourcePath`" `"$DestinationPath`""
+        $cmdArgs = "/c chcp 65001 >nul && `"$($script:ADB)`" -s $DeviceID pull `"$safeSource`" `"$safeDest`""
         
         $psi = New-Object System.Diagnostics.ProcessStartInfo
         $psi.FileName = "cmd.exe"
@@ -785,7 +792,9 @@ function Protect-ShellPath {
     .SYNOPSIS
         Protects against command injection in shell paths
     .DESCRIPTION
-        Whitelist validation, null byte prevention, unicode normalization, shell escaping
+        Whitelist validation, null byte prevention, unicode normalization, shell escaping.
+        Handles non-ASCII characters (Turkish, accented, CJK, emoji) gracefully by
+        allowing them through while blocking only actual shell injection vectors.
     #>
     param(
         [Parameter(Mandatory=$true)]
@@ -814,20 +823,10 @@ function Protect-ShellPath {
         throw "Path contains invalid Unicode characters"
     }
     
-    # Whitelist validation - expanded for file transfer compatibility
-    # Allowed: alphanumeric, forward slash, dash, underscore, dot, space, 
-    #          parentheses, at-sign, comma, plus, equals, hash, percent, 
-    #          exclamation, tilde, brackets, braces, caret (common in filenames)
-    # IMPORTANT: Use CultureInvariant to handle Turkish locale I/i issue
-    $allowedPattern = '^[a-zA-Z0-9/\-_\.\s\(\)@,\+=#%!\~\[\]\{\}\^]+$'
-    $regexOptions = [System.Text.RegularExpressions.RegexOptions]::CultureInvariant
-    if (-not [regex]::IsMatch($Path, $allowedPattern, $regexOptions)) {
-        Write-Log "Path contains special characters: $Path" -Level DEBUG
-    }
-    
     # Block ONLY truly dangerous shell metacharacters that enable command injection
-    # These cannot be safely escaped even in single quotes
-    $dangerousChars = @(';', '|', '&', '$', '<', '>', '`', '\')
+    # Note: Backslash (\) is NOT blocked - it's a valid path separator on Windows
+    # and common in Android file names. Single quotes are handled by escaping.
+    $dangerousChars = @(';', '|', '&', '$', '<', '>', '`')
     foreach ($char in $dangerousChars) {
         if ($Path.Contains($char)) {
             Write-Log "Dangerous shell metacharacter '$char' found in path" -Level WARNING
@@ -1630,21 +1629,8 @@ function Initialize-DefaultConfig {
     .SYNOPSIS
         Creates default configuration
     #>
-    # Create default configuration with magic numbers documented
-    # Use secure path resolution instead of env vars
-    $userProfile = [Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile)
-    
-    if ([string]::IsNullOrEmpty($userProfile) -or -not (Test-Path $userProfile)) {
-        throw "Cannot determine user profile directory securely"
-    }
-    
-    $defaultDest = Join-Path $userProfile "Desktop\adbData"
-    
-    # Validate path structure (prevent injection)
-    if ($defaultDest -notmatch '^[A-Z]:\\Users\\[^\\<>:\"\|\?\*]+\\Desktop\\adbData$') {
-        Write-Log "WARNING: Default destination path validation failed, using fallback" -Level WARNING
-        $defaultDest = "C:\adbData"  # Safe fallback
-    }
+    # Default destination: C:\croxz
+    $defaultDest = "C:\croxz"
     
     $script:Config = [PSCustomObject]@{
         Version = $script:Version
@@ -1699,17 +1685,17 @@ function Initialize-Presets {
         Write-Log "Presets loaded: $($script:Presets.presets.Count) presets" -Level DEBUG
     }
     else {
-        # Create default presets
+        # Create default presets - comprehensive set of common Android folders
         $script:Presets = [PSCustomObject]@{
             presets = @(
                 [PSCustomObject]@{
                     id = "camera_photos"
-                    name = "[CAMERA] Photos"
-                    description = "Transfer all photos from camera"
+                    name = "Camera Photos"
+                    description = "Photos from camera (DCIM/Camera)"
                     source_paths = @("/sdcard/DCIM/Camera/")
-                    destination = "Pictures/Phone Camera/{date}/"
+                    destination = "Photos/Camera/{date}/"
                     filters = [PSCustomObject]@{
-                        extensions = @(".jpg", ".jpeg", ".png", ".heic", ".dng")
+                        extensions = @(".jpg", ".jpeg", ".png", ".heic", ".dng", ".webp", ".raw", ".bmp", ".gif")
                     }
                     options = [PSCustomObject]@{
                         recursive = $false
@@ -1719,12 +1705,12 @@ function Initialize-Presets {
                 },
                 [PSCustomObject]@{
                     id = "camera_videos"
-                    name = "[VIDEO] Camera Videos"
-                    description = "Transfer videos from camera"
+                    name = "Camera Videos"
+                    description = "Videos from camera (DCIM/Camera)"
                     source_paths = @("/sdcard/DCIM/Camera/")
-                    destination = "Videos/Phone Camera/{date}/"
+                    destination = "Videos/Camera/{date}/"
                     filters = [PSCustomObject]@{
-                        extensions = @(".mp4", ".mov", ".avi", ".3gp")
+                        extensions = @(".mp4", ".mov", ".avi", ".3gp", ".mkv", ".webm")
                     }
                     options = [PSCustomObject]@{
                         recursive = $false
@@ -1732,11 +1718,11 @@ function Initialize-Presets {
                     }
                 },
                 [PSCustomObject]@{
-                    id = "whatsapp_media"
-                    name = "[WHATSAPP] Media"
-                    description = "Backup WhatsApp photos and videos"
-                    source_paths = @("/sdcard/WhatsApp/Media/")
-                    destination = "Backups/WhatsApp/{date}/"
+                    id = "all_dcim"
+                    name = "All DCIM"
+                    description = "Everything in DCIM (all camera apps)"
+                    source_paths = @("/sdcard/DCIM/")
+                    destination = "Photos/DCIM/{date}/"
                     options = [PSCustomObject]@{
                         recursive = $true
                         verify = $true
@@ -1744,23 +1730,144 @@ function Initialize-Presets {
                 },
                 [PSCustomObject]@{
                     id = "screenshots"
-                    name = "[SCREEN] Screenshots"
-                    description = "Transfer all screenshots"
-                    source_paths = @("/sdcard/Pictures/Screenshots/", "/sdcard/Screenshots/")
-                    destination = "Pictures/Screenshots/{date}/"
+                    name = "Screenshots"
+                    description = "All screenshots"
+                    source_paths = @("/sdcard/Pictures/Screenshots/", "/sdcard/Screenshots/", "/sdcard/DCIM/Screenshots/")
+                    destination = "Photos/Screenshots/{date}/"
                     options = [PSCustomObject]@{
                         recursive = $false
                         verify = $true
                     }
                 },
                 [PSCustomObject]@{
-                    id = "downloads"
-                    name = "[DOWNLOAD] Files"
-                    description = "Transfer downloaded files"
-                    source_paths = @("/sdcard/Download/")
-                    destination = "Downloads/Phone/"
+                    id = "pictures"
+                    name = "All Pictures"
+                    description = "Everything in Pictures folder"
+                    source_paths = @("/sdcard/Pictures/")
+                    destination = "Photos/Pictures/{date}/"
                     options = [PSCustomObject]@{
-                        recursive = $false
+                        recursive = $true
+                        verify = $true
+                    }
+                },
+                [PSCustomObject]@{
+                    id = "movies"
+                    name = "Movies"
+                    description = "Movies and video files"
+                    source_paths = @("/sdcard/Movies/")
+                    destination = "Videos/Movies/{date}/"
+                    options = [PSCustomObject]@{
+                        recursive = $true
+                        verify = $true
+                    }
+                },
+                [PSCustomObject]@{
+                    id = "downloads"
+                    name = "Downloads"
+                    description = "Downloaded files"
+                    source_paths = @("/sdcard/Download/")
+                    destination = "Downloads/{date}/"
+                    options = [PSCustomObject]@{
+                        recursive = $true
+                        verify = $true
+                    }
+                },
+                [PSCustomObject]@{
+                    id = "music"
+                    name = "Music"
+                    description = "Music files"
+                    source_paths = @("/sdcard/Music/")
+                    destination = "Music/"
+                    options = [PSCustomObject]@{
+                        recursive = $true
+                        verify = $true
+                    }
+                },
+                [PSCustomObject]@{
+                    id = "documents"
+                    name = "Documents"
+                    description = "Document files"
+                    source_paths = @("/sdcard/Documents/")
+                    destination = "Documents/"
+                    options = [PSCustomObject]@{
+                        recursive = $true
+                        verify = $true
+                    }
+                },
+                [PSCustomObject]@{
+                    id = "whatsapp_media"
+                    name = "WhatsApp Media"
+                    description = "WhatsApp photos, videos, audio"
+                    source_paths = @("/sdcard/WhatsApp/Media/", "/sdcard/Android/media/com.whatsapp/WhatsApp/Media/")
+                    destination = "Apps/WhatsApp/{date}/"
+                    options = [PSCustomObject]@{
+                        recursive = $true
+                        verify = $true
+                    }
+                },
+                [PSCustomObject]@{
+                    id = "telegram"
+                    name = "Telegram"
+                    description = "Telegram media and files"
+                    source_paths = @("/sdcard/Telegram/", "/sdcard/Android/media/org.telegram.messenger/Telegram/")
+                    destination = "Apps/Telegram/{date}/"
+                    options = [PSCustomObject]@{
+                        recursive = $true
+                        verify = $true
+                    }
+                },
+                [PSCustomObject]@{
+                    id = "instagram"
+                    name = "Instagram"
+                    description = "Instagram saved media"
+                    source_paths = @("/sdcard/Instagram/", "/sdcard/Pictures/Instagram/", "/sdcard/DCIM/Instagram/")
+                    destination = "Apps/Instagram/{date}/"
+                    options = [PSCustomObject]@{
+                        recursive = $true
+                        verify = $true
+                    }
+                },
+                [PSCustomObject]@{
+                    id = "voice_records"
+                    name = "Voice Recordings"
+                    description = "Voice recorder and call recordings"
+                    source_paths = @("/sdcard/Recordings/", "/sdcard/Recording/", "/sdcard/Voice Recorder/", "/sdcard/Call/")
+                    destination = "Recordings/{date}/"
+                    options = [PSCustomObject]@{
+                        recursive = $true
+                        verify = $true
+                    }
+                },
+                [PSCustomObject]@{
+                    id = "bluetooth"
+                    name = "Bluetooth"
+                    description = "Files received via Bluetooth"
+                    source_paths = @("/sdcard/Bluetooth/", "/sdcard/Download/Bluetooth/")
+                    destination = "Bluetooth/"
+                    options = [PSCustomObject]@{
+                        recursive = $true
+                        verify = $true
+                    }
+                },
+                [PSCustomObject]@{
+                    id = "ringtones_notifications"
+                    name = "Ringtones & Notifications"
+                    description = "Custom ringtones and notification sounds"
+                    source_paths = @("/sdcard/Ringtones/", "/sdcard/Notifications/", "/sdcard/Alarms/")
+                    destination = "Sounds/"
+                    options = [PSCustomObject]@{
+                        recursive = $true
+                        verify = $true
+                    }
+                },
+                [PSCustomObject]@{
+                    id = "podcasts"
+                    name = "Podcasts"
+                    description = "Downloaded podcasts"
+                    source_paths = @("/sdcard/Podcasts/")
+                    destination = "Podcasts/"
+                    options = [PSCustomObject]@{
+                        recursive = $true
                         verify = $true
                     }
                 }
@@ -2602,10 +2709,30 @@ function Copy-AndroidFile {
     $retryDelay = $script:Config.RetryDelaySeconds
     $tempPath = $null
     
-    # Sanitize source path if enabled
+    # Sanitize source path if enabled (graceful - catch errors and try raw path)
     $safeSourcePath = $SourcePath
     if ($script:Config.SanitizePaths) {
-        $safeSourcePath = Protect-ShellPath -Path $SourcePath
+        try {
+            $safeSourcePath = Protect-ShellPath -Path $SourcePath
+        }
+        catch {
+            Write-Log "Path sanitization failed for '$SourcePath': $($_.Exception.Message). Using raw path." -Level WARNING
+            $safeSourcePath = $SourcePath
+        }
+    }
+    
+    # Sanitize Windows destination path - replace invalid filename characters
+    try {
+        $destDir = Split-Path $DestinationPath -Parent
+        $destFileName = Split-Path $DestinationPath -Leaf
+        $invalidChars = [System.IO.Path]::GetInvalidFileNameChars()
+        foreach ($c in $invalidChars) {
+            $destFileName = $destFileName.Replace([string]$c, '_')
+        }
+        $DestinationPath = Join-Path $destDir $destFileName
+    }
+    catch {
+        Write-Log "Destination path cleanup failed: $($_.Exception.Message)" -Level DEBUG
     }
     
     # Skip if file already exists with same size (resume/incremental transfer)
@@ -3204,8 +3331,12 @@ function Show-ScriptInfo {
 function Show-TransferSummary {
     <#
     .SYNOPSIS
-        Shows transfer summary statistics
+        Shows transfer summary statistics with destination path
     #>
+    param(
+        [string]$DestinationPath = $null
+    )
+    
     $duration = (Get-Date) - $script:TransferStats.StartTime
     $avgSpeed = if ($duration.TotalSeconds -gt 0) {
         $script:TransferStats.TransferredBytes / $duration.TotalSeconds
@@ -3234,7 +3365,10 @@ function Show-TransferSummary {
         Write-Host "  ! Some files failed. Check logs for details." -ForegroundColor Yellow
     }
 
+    # Show destination path
+    $showDest = if ($DestinationPath) { $DestinationPath } else { $script:Config.DefaultDestination }
     Write-Host ""
+    Write-Host "  Files saved to: $showDest" -ForegroundColor Cyan
     Write-Host "  Log: $($script:LogFile)" -ForegroundColor DarkGray
     Write-Host ""
     Write-Host "  ─────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
@@ -3367,7 +3501,7 @@ function Show-DeviceSelection {
 function Show-PresetMenu {
     <#
     .SYNOPSIS
-        Shows preset transfer menu
+        Shows preset transfer menu with multi-select support
     #>
     Clear-Host
     Show-Banner
@@ -3381,58 +3515,103 @@ function Show-PresetMenu {
     Write-Host "  Quick Transfer (Presets)" -ForegroundColor White
     Write-Host ""
     Write-Host "  Device: $($script:CurrentDevice.Model)" -ForegroundColor Green
+    Write-Host "  Destination: $($script:Config.DefaultDestination)" -ForegroundColor DarkGray
     Write-Host ""
     Write-Host "  ─────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
     Write-Host ""
 
     $presets = $script:Presets.presets
 
+    # Display presets in two columns for space efficiency
     for ($i = 0; $i -lt $presets.Count; $i++) {
-        $preset = $presets[$i]
-        Write-Host "  [$($i + 1)] $($preset.name)" -ForegroundColor White
-        Write-Host "      $($preset.description)" -ForegroundColor DarkGray
-        Write-Host ""
+        $num = $i + 1
+        $padNum = if ($num -lt 10) { " $num" } else { "$num" }
+        Write-Host "  [$padNum] $($presets[$i].name)" -ForegroundColor White -NoNewline
+        Write-Host "  $($presets[$i].description)" -ForegroundColor DarkGray
     }
 
+    Write-Host ""
+    Write-Host "  ─────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
+    Write-Host ""
+    Write-Host "  Enter numbers separated by commas for multi-select." -ForegroundColor DarkGray
+    Write-Host "  Example: 1,3,5  or  1-5  or  all" -ForegroundColor DarkGray
+    Write-Host ""
     Write-Host "  [0] Back" -ForegroundColor DarkGray
     Write-Host ""
 
     while ($true) {
-        Write-Host "  Select preset (0-$($presets.Count)): " -ForegroundColor White -NoNewline
-        $choice = Read-Host
+        Write-Host "  > " -ForegroundColor White -NoNewline
+        $input_str = (Read-Host).Trim()
 
-        if ($choice -eq "0") {
+        if ($input_str -eq "0" -or [string]::IsNullOrEmpty($input_str)) {
             return
         }
 
-        $index = [int]$choice - 1
-        if ($index -ge 0 -and $index -lt $presets.Count) {
-            $preset = $presets[$index]
-
-            $script:TransferStats = @{
-                TotalFiles = 0
-                TransferredFiles = 0
-                SkippedFiles = 0
-                TotalBytes = 0
-                TransferredBytes = 0
-                FailedFiles = 0
-                StartTime = Get-Date
-            }
-
-            Write-Host ""
-            Write-Host "  Starting: $($preset.name)" -ForegroundColor White
-
-            [void](Invoke-Preset -PresetID $preset.id -DeviceID $script:CurrentDevice.ID)
-
-            Show-TransferSummary
-
-            Write-Host "  Press Enter to continue..." -ForegroundColor DarkGray -NoNewline
-            $null = Read-Host
-            return
+        # Parse selection
+        $selectedIndices = @()
+        
+        if ($input_str.Equals("all", [System.StringComparison]::OrdinalIgnoreCase)) {
+            $selectedIndices = 0..($presets.Count - 1)
         }
         else {
-            Write-Host "  Invalid selection." -ForegroundColor DarkYellow
+            foreach ($part in ($input_str -split ',')) {
+                $part = $part.Trim()
+                if ($part -match '^(\d+)-(\d+)$') {
+                    $rangeStart = [int]$matches[1]
+                    $rangeEnd = [int]$matches[2]
+                    for ($r = $rangeStart; $r -le $rangeEnd; $r++) {
+                        if ($r -ge 1 -and $r -le $presets.Count) {
+                            $selectedIndices += ($r - 1)
+                        }
+                    }
+                }
+                elseif ($part -match '^\d+$') {
+                    $num = [int]$part
+                    if ($num -ge 1 -and $num -le $presets.Count) {
+                        $selectedIndices += ($num - 1)
+                    }
+                }
+            }
         }
+
+        $selectedIndices = $selectedIndices | Select-Object -Unique | Sort-Object
+
+        if ($selectedIndices.Count -eq 0) {
+            Write-Host "  Invalid selection." -ForegroundColor DarkYellow
+            continue
+        }
+
+        # Confirm selection
+        Write-Host ""
+        Write-Host "  Selected:" -ForegroundColor White
+        foreach ($idx in $selectedIndices) {
+            Write-Host "    + $($presets[$idx].name)" -ForegroundColor Green
+        }
+        Write-Host ""
+
+        # Reset stats
+        $script:TransferStats = @{
+            TotalFiles = 0
+            TransferredFiles = 0
+            SkippedFiles = 0
+            TotalBytes = 0
+            TransferredBytes = 0
+            FailedFiles = 0
+            StartTime = Get-Date
+        }
+
+        # Execute all selected presets
+        foreach ($idx in $selectedIndices) {
+            $preset = $presets[$idx]
+            Write-Host "  Starting: $($preset.name)" -ForegroundColor White
+            [void](Invoke-Preset -PresetID $preset.id -DeviceID $script:CurrentDevice.ID)
+        }
+
+        Show-TransferSummary -DestinationPath $script:Config.DefaultDestination
+
+        Write-Host "  Press Enter to continue..." -ForegroundColor DarkGray -NoNewline
+        $null = Read-Host
+        return
     }
 }
 
@@ -3516,7 +3695,7 @@ function Show-CustomTransferMenu {
                                 -Verify:$verify `
                                 -Recursive:$recursive)
 
-    Show-TransferSummary
+    Show-TransferSummary -DestinationPath $destPath
 
     Write-Host "  Press Enter to continue..." -ForegroundColor DarkGray -NoNewline
     $null = Read-Host
@@ -3748,6 +3927,375 @@ function Show-Settings {
     Show-Settings
 }
 
+# ============================================================================
+# FULL BACKUP (PRE-FORMAT)
+# ============================================================================
+
+function Show-FullBackupMenu {
+    <#
+    .SYNOPSIS
+        Full device backup before format - backs up all essential user data
+    #>
+    Clear-Host
+    Show-Banner
+
+    if (-not $script:CurrentDevice) {
+        Write-Host "  ! No device selected. Select a device first." -ForegroundColor Yellow
+        Start-Sleep -Seconds 2
+        return
+    }
+
+    Write-Host "  Full Backup (Pre-Format)" -ForegroundColor White
+    Write-Host ""
+    Write-Host "  Device: $($script:CurrentDevice.Model)" -ForegroundColor Green
+    Write-Host ""
+    Write-Host "  ─────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
+    Write-Host ""
+    Write-Host "  This will backup all essential data from your device." -ForegroundColor DarkGray
+    Write-Host "  Recommended before factory reset or ROM flash." -ForegroundColor DarkGray
+    Write-Host ""
+    Write-Host "  Folders to backup:" -ForegroundColor White
+    Write-Host ""
+    
+    $backupPaths = @(
+        @{ Path = "/sdcard/DCIM/";       Name = "DCIM (Camera, Photos)" },
+        @{ Path = "/sdcard/Pictures/";    Name = "Pictures" },
+        @{ Path = "/sdcard/Movies/";      Name = "Movies" },
+        @{ Path = "/sdcard/Music/";       Name = "Music" },
+        @{ Path = "/sdcard/Documents/";   Name = "Documents" },
+        @{ Path = "/sdcard/Download/";    Name = "Downloads" },
+        @{ Path = "/sdcard/WhatsApp/";    Name = "WhatsApp" },
+        @{ Path = "/sdcard/Telegram/";    Name = "Telegram" },
+        @{ Path = "/sdcard/Recordings/";  Name = "Recordings" },
+        @{ Path = "/sdcard/Ringtones/";   Name = "Ringtones" },
+        @{ Path = "/sdcard/Notifications/"; Name = "Notifications" },
+        @{ Path = "/sdcard/Alarms/";      Name = "Alarms" },
+        @{ Path = "/sdcard/Podcasts/";    Name = "Podcasts" },
+        @{ Path = "/sdcard/Bluetooth/";   Name = "Bluetooth" },
+        @{ Path = "/sdcard/Android/media/com.whatsapp/"; Name = "WhatsApp (Android 11+)" },
+        @{ Path = "/sdcard/Android/media/org.telegram.messenger/"; Name = "Telegram (Android 11+)" }
+    )
+
+    foreach ($bp in $backupPaths) {
+        Write-Host "    + $($bp.Name)" -ForegroundColor DarkGray
+    }
+
+    Write-Host ""
+    Write-Host "  Destination: $($script:Config.DefaultDestination)\FullBackup\{date}" -ForegroundColor DarkGray
+    Write-Host ""
+    Write-Host "  ─────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
+    Write-Host ""
+    Write-Host "  Start full backup? (Y/N): " -ForegroundColor White -NoNewline
+    $confirm = (Read-Host).Trim()
+
+    if ([string]::IsNullOrEmpty($confirm) -or -not $confirm.Equals("Y", [System.StringComparison]::OrdinalIgnoreCase)) {
+        return
+    }
+
+    $backupDate = Get-Date -Format "yyyy-MM-dd"
+    $backupDest = Join-Path $script:Config.DefaultDestination "FullBackup\$backupDate"
+
+    # Reset stats
+    $script:TransferStats = @{
+        TotalFiles = 0
+        TransferredFiles = 0
+        SkippedFiles = 0
+        TotalBytes = 0
+        TransferredBytes = 0
+        FailedFiles = 0
+        StartTime = Get-Date
+    }
+
+    Write-Host ""
+    Write-Host "  Starting full backup..." -ForegroundColor White
+    Write-Host ""
+
+    $successCount = 0
+    $skipCount = 0
+    
+    foreach ($bp in $backupPaths) {
+        # Check if path exists on device
+        $exists = Test-AndroidPath -DeviceID $script:CurrentDevice.ID -Path $bp.Path
+        if (-not $exists) {
+            Write-Host "  - $($bp.Name): not found, skipping" -ForegroundColor DarkGray
+            $skipCount++
+            continue
+        }
+
+        Write-Host "  + $($bp.Name)" -ForegroundColor White
+        
+        # Derive subfolder name from path
+        $folderName = ($bp.Path -replace '/sdcard/', '' -replace '/sdcard$', '' -replace '/', '_').TrimEnd('_')
+        if ([string]::IsNullOrEmpty($folderName)) { $folderName = "root" }
+        $dest = Join-Path $backupDest $folderName
+
+        try {
+            [void](Copy-AndroidDirectory -DeviceID $script:CurrentDevice.ID `
+                                        -SourcePath $bp.Path `
+                                        -DestinationPath $dest `
+                                        -Verify:$true `
+                                        -Recursive:$true)
+            $successCount++
+        }
+        catch {
+            Write-Log "Full backup failed for $($bp.Path): $($_.Exception.Message)" -Level ERROR
+            Write-Host "    ! Error: $($_.Exception.Message)" -ForegroundColor Yellow
+        }
+    }
+
+    Write-Host ""
+    Write-Host "  Full backup completed ($successCount folders backed up, $skipCount skipped)" -ForegroundColor Green
+    
+    Show-TransferSummary -DestinationPath $backupDest
+
+    Write-Host "  Press Enter to continue..." -ForegroundColor DarkGray -NoNewline
+    $null = Read-Host
+}
+
+# ============================================================================
+# CLI FILE EXPLORER
+# ============================================================================
+
+function Show-FileExplorer {
+    <#
+    .SYNOPSIS
+        CLI-based file explorer for Android filesystem via ADB
+    .DESCRIPTION
+        Browse the Android filesystem, navigate folders, and transfer
+        selected files or folders to the PC.
+    #>
+    if (-not $script:CurrentDevice) {
+        Write-Host "  ! No device selected. Select a device first." -ForegroundColor Yellow
+        Start-Sleep -Seconds 2
+        return
+    }
+
+    $currentPath = "/sdcard"
+    $deviceID = $script:CurrentDevice.ID
+
+    while ($true) {
+        Clear-Host
+        Show-Banner
+
+        Write-Host "  File Explorer" -ForegroundColor White
+        Write-Host ""
+        Write-Host "  Device: $($script:CurrentDevice.Model)" -ForegroundColor Green
+        Write-Host "  Path: $currentPath" -ForegroundColor Cyan
+        Write-Host ""
+        Write-Host "  ─────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
+        Write-Host ""
+
+        # List contents of current directory
+        $escapedPath = $currentPath -replace "'", "'\\''"
+        $listCmd = "ls -la '$escapedPath' 2>/dev/null"
+        $rawOutput = Invoke-ADBCommandUTF8 -DeviceID $deviceID -ShellCommand $listCmd
+
+        if ($null -eq $rawOutput -or $script:LastADBExitCode -ne 0) {
+            Write-Host "  ! Cannot read directory" -ForegroundColor Yellow
+            Write-Host ""
+            Write-Host "  [B] Go back  [0] Exit explorer" -ForegroundColor DarkGray
+            Write-Host ""
+            Write-Host "  > " -ForegroundColor White -NoNewline
+            $nav = (Read-Host).Trim()
+            if ($nav.Equals("0", [System.StringComparison]::OrdinalIgnoreCase)) { return }
+            $currentPath = Split-Path $currentPath -Parent
+            if ([string]::IsNullOrEmpty($currentPath)) { $currentPath = "/" }
+            $currentPath = $currentPath -replace '\\', '/'
+            continue
+        }
+
+        $lines = $rawOutput -split "`n" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+        
+        # Parse directory listing
+        $entries = [System.Collections.ArrayList]::new()
+        foreach ($line in $lines) {
+            $trimmed = $line.Trim()
+            # Skip total line
+            if ($trimmed -match '^total\s+\d+') { continue }
+            
+            # Parse ls -la output: permissions links owner group size date time name
+            # Handle both long date format and short
+            $isDir = $trimmed.StartsWith('d')
+            $isLink = $trimmed.StartsWith('l')
+            
+            # Extract name (last field, but could contain spaces)
+            # Try to match: perms links owner group size month day time/year name
+            if ($trimmed -match '^\S+\s+\S+\s+\S+\s+\S+\s+(\d+)\s+\S+\s+\S+\s+\S+\s+(.+)$') {
+                $size = [long]$matches[1]
+                $name = $matches[2].Trim()
+                
+                # Handle symlinks: name -> target
+                if ($isLink -and $name -match '^(.+?)\s+->\s+') {
+                    $name = $matches[1].Trim()
+                }
+                
+                # Skip . and ..
+                if ($name -eq '.' -or $name -eq '..') { continue }
+                
+                [void]$entries.Add([PSCustomObject]@{
+                    Name = $name
+                    IsDirectory = $isDir -or $isLink
+                    Size = $size
+                    Raw = $trimmed
+                })
+            }
+        }
+
+        # Sort: directories first, then files
+        $sortedEntries = @($entries | Sort-Object -Property @{Expression={-not $_.IsDirectory}}, Name)
+
+        if ($sortedEntries.Count -eq 0) {
+            Write-Host "  (empty directory)" -ForegroundColor DarkGray
+        }
+        else {
+            $maxShow = [Math]::Min($sortedEntries.Count, 40)
+            for ($i = 0; $i -lt $maxShow; $i++) {
+                $entry = $sortedEntries[$i]
+                $num = $i + 1
+                $padNum = if ($num -lt 10) { " $num" } else { "$num" }
+                
+                if ($entry.IsDirectory) {
+                    Write-Host "  [$padNum] " -ForegroundColor White -NoNewline
+                    Write-Host "$($entry.Name)/" -ForegroundColor Cyan
+                }
+                else {
+                    $sizeStr = Format-FileSize $entry.Size
+                    Write-Host "  [$padNum] " -ForegroundColor White -NoNewline
+                    Write-Host "$($entry.Name)" -ForegroundColor DarkGray -NoNewline
+                    Write-Host "  ($sizeStr)" -ForegroundColor DarkGray
+                }
+            }
+            
+            if ($sortedEntries.Count -gt $maxShow) {
+                Write-Host "  ... and $($sortedEntries.Count - $maxShow) more items" -ForegroundColor DarkGray
+            }
+        }
+
+        Write-Host ""
+        Write-Host "  ─────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
+        Write-Host ""
+        Write-Host "  Commands:" -ForegroundColor DarkGray
+        Write-Host "    [number]  Open folder / Select file" -ForegroundColor DarkGray
+        Write-Host "    [B]       Go back (parent directory)" -ForegroundColor DarkGray
+        Write-Host "    [C]       Copy current folder to PC" -ForegroundColor DarkGray
+        Write-Host "    [P path]  Go to path (e.g. P /sdcard/DCIM)" -ForegroundColor DarkGray
+        Write-Host "    [0]       Exit explorer" -ForegroundColor DarkGray
+        Write-Host ""
+        Write-Host "  > " -ForegroundColor White -NoNewline
+        $cmd = (Read-Host).Trim()
+
+        if ([string]::IsNullOrEmpty($cmd)) { continue }
+
+        # Exit
+        if ($cmd -eq "0") { return }
+
+        # Go back
+        if ($cmd.Equals("B", [System.StringComparison]::OrdinalIgnoreCase)) {
+            if ($currentPath -ne "/" -and $currentPath -ne "/sdcard") {
+                $parent = $currentPath -replace '/[^/]+/?$', ''
+                if ([string]::IsNullOrEmpty($parent)) { $parent = "/" }
+                $currentPath = $parent
+            }
+            continue
+        }
+
+        # Go to path
+        if ($cmd.StartsWith("P ", [System.StringComparison]::OrdinalIgnoreCase) -or 
+            $cmd.StartsWith("p ", [System.StringComparison]::OrdinalIgnoreCase)) {
+            $newPath = $cmd.Substring(2).Trim()
+            if (-not [string]::IsNullOrEmpty($newPath)) {
+                if (Test-AndroidPath -DeviceID $deviceID -Path $newPath) {
+                    $currentPath = $newPath.TrimEnd('/')
+                }
+                else {
+                    Write-Host "  ! Path not found: $newPath" -ForegroundColor Yellow
+                    Start-Sleep -Seconds 1
+                }
+            }
+            continue
+        }
+
+        # Copy current folder
+        if ($cmd.Equals("C", [System.StringComparison]::OrdinalIgnoreCase)) {
+            $folderName = Split-Path $currentPath -Leaf
+            if ([string]::IsNullOrEmpty($folderName)) { $folderName = "root" }
+            $dest = Join-Path $script:Config.DefaultDestination "Explorer\$folderName"
+
+            Write-Host ""
+            Write-Host "  Copy '$currentPath' to '$dest'? (Y/N): " -ForegroundColor White -NoNewline
+            $confirm = (Read-Host).Trim()
+            
+            if (-not [string]::IsNullOrEmpty($confirm) -and $confirm.Equals("Y", [System.StringComparison]::OrdinalIgnoreCase)) {
+                $script:TransferStats = @{
+                    TotalFiles = 0; TransferredFiles = 0; SkippedFiles = 0
+                    TotalBytes = 0; TransferredBytes = 0; FailedFiles = 0
+                    StartTime = Get-Date
+                }
+
+                [void](Copy-AndroidDirectory -DeviceID $deviceID `
+                                            -SourcePath "$currentPath/" `
+                                            -DestinationPath $dest `
+                                            -Verify:$true -Recursive:$true)
+
+                Show-TransferSummary -DestinationPath $dest
+                Write-Host "  Press Enter to continue..." -ForegroundColor DarkGray -NoNewline
+                $null = Read-Host
+            }
+            continue
+        }
+
+        # Number selection - open folder or copy file
+        if ($cmd -match '^\d+$') {
+            $idx = [int]$cmd - 1
+            if ($idx -ge 0 -and $idx -lt $sortedEntries.Count) {
+                $selected = $sortedEntries[$idx]
+
+                if ($selected.IsDirectory) {
+                    # Navigate into directory
+                    $currentPath = "$currentPath/$($selected.Name)" -replace '//', '/'
+                }
+                else {
+                    # Offer to copy the file
+                    $filePath = "$currentPath/$($selected.Name)" -replace '//', '/'
+                    $fileName = $selected.Name
+                    $dest = Join-Path $script:Config.DefaultDestination "Explorer\$fileName"
+
+                    Write-Host ""
+                    Write-Host "  Copy '$fileName' to PC? (Y/N): " -ForegroundColor White -NoNewline
+                    $confirm = (Read-Host).Trim()
+                    
+                    if (-not [string]::IsNullOrEmpty($confirm) -and $confirm.Equals("Y", [System.StringComparison]::OrdinalIgnoreCase)) {
+                        $script:TransferStats = @{
+                            TotalFiles = 1; TransferredFiles = 0; SkippedFiles = 0
+                            TotalBytes = $selected.Size; TransferredBytes = 0; FailedFiles = 0
+                            StartTime = Get-Date
+                        }
+
+                        $success = Copy-AndroidFile -DeviceID $deviceID `
+                                                   -SourcePath $filePath `
+                                                   -DestinationPath $dest `
+                                                   -Verify
+
+                        if ($success) {
+                            Write-Host "  * File copied to: $dest" -ForegroundColor Green
+                        }
+                        else {
+                            Write-Host "  ! Transfer failed" -ForegroundColor Yellow
+                        }
+                        Write-Host ""
+                        Write-Host "  Press Enter to continue..." -ForegroundColor DarkGray -NoNewline
+                        $null = Read-Host
+                    }
+                }
+            }
+            else {
+                Write-Host "  Invalid selection." -ForegroundColor DarkYellow
+                Start-Sleep -Milliseconds 500
+            }
+        }
+    }
+}
+
 function Show-MainMenu {
     <#
     .SYNOPSIS
@@ -3769,9 +4317,11 @@ function Show-MainMenu {
     Write-Host "  [1] Select Device" -ForegroundColor White
     Write-Host "  [2] Quick Transfer (Presets)" -ForegroundColor White
     Write-Host "  [3] Custom Transfer" -ForegroundColor White
-    Write-Host "  [4] Settings" -ForegroundColor White
-    Write-Host "  [5] Device Info" -ForegroundColor White
-    Write-Host "  [6] Help" -ForegroundColor White
+    Write-Host "  [4] Full Backup (Pre-Format)" -ForegroundColor White
+    Write-Host "  [5] File Explorer" -ForegroundColor White
+    Write-Host "  [6] Settings" -ForegroundColor White
+    Write-Host "  [7] Device Info" -ForegroundColor White
+    Write-Host "  [8] Help" -ForegroundColor White
     Write-Host ""
     Write-Host "  [0] Exit" -ForegroundColor DarkGray
     Write-Host ""
@@ -3782,9 +4332,11 @@ function Show-MainMenu {
         "1" { Show-DeviceSelection }
         "2" { Show-PresetMenu }
         "3" { Show-CustomTransferMenu }
-        "4" { Show-Settings }
-        "5" { Show-DeviceInfo }
-        "6" { Show-Help }
+        "4" { Show-FullBackupMenu }
+        "5" { Show-FileExplorer }
+        "6" { Show-Settings }
+        "7" { Show-DeviceInfo }
+        "8" { Show-Help }
         "0" {
             Write-Host ""
             Write-Host "  Goodbye." -ForegroundColor DarkGray
@@ -3817,18 +4369,20 @@ function Invoke-FirstRunSetup {
     Write-Host ""
     Write-Host "  Choose default transfer destination:" -ForegroundColor White
     Write-Host ""
-    Write-Host "  [1] Desktop" -ForegroundColor DarkGray
-    Write-Host "  [2] Documents" -ForegroundColor DarkGray
-    Write-Host "  [3] Downloads" -ForegroundColor DarkGray
+    Write-Host "  [1] C:\croxz (recommended)" -ForegroundColor DarkGray
+    Write-Host "  [2] Desktop\adbData" -ForegroundColor DarkGray
+    Write-Host "  [3] Documents\adbData" -ForegroundColor DarkGray
+    Write-Host "  [4] Downloads\adbData" -ForegroundColor DarkGray
     Write-Host ""
     Write-Host "  > " -ForegroundColor White -NoNewline
     $choice = Read-Host
 
     $defaultDest = switch ($choice) {
-        "1" { [Environment]::GetFolderPath("Desktop") + "\adbData" }
-        "2" { [Environment]::GetFolderPath("MyDocuments") + "\adbData" }
-        "3" { [Environment]::GetFolderPath("UserProfile") + "\Downloads\adbData" }
-        default { [Environment]::GetFolderPath("Desktop") + "\adbData" }
+        "1" { "C:\croxz" }
+        "2" { [Environment]::GetFolderPath("Desktop") + "\adbData" }
+        "3" { [Environment]::GetFolderPath("MyDocuments") + "\adbData" }
+        "4" { [Environment]::GetFolderPath("UserProfile") + "\Downloads\adbData" }
+        default { "C:\croxz" }
     }
 
     $script:Config.DefaultDestination = $defaultDest
