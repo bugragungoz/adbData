@@ -645,7 +645,7 @@ function Test-InputSafety {
             $devicePaths = @('CON', 'PRN', 'AUX', 'NUL', 'COM1', 'COM2', 'LPT1', 'LPT2')
             $pathParts = $Input -split '[/\\]'
             foreach ($part in $pathParts) {
-                if ($devicePaths -contains $part.ToUpper()) {
+                if ($devicePaths -contains $part.ToUpperInvariant()) {
                     $validationResult.IsValid = $false
                     $validationResult.ErrorMessage = "Path contains Windows device name: $part"
                     return $validationResult
@@ -950,7 +950,7 @@ function Get-SafeRelativePath {
     $devicePaths = @('CON', 'PRN', 'AUX', 'NUL', 'COM1', 'COM2', 'LPT1', 'LPT2')
     $pathParts = $relative -split '[/\\]'
     foreach ($part in $pathParts) {
-        $upperPart = $part.ToUpper()
+        $upperPart = $part.ToUpperInvariant()
         if ($devicePaths -contains $upperPart) {
             throw "Device path detected in relative path: $part (security violation)"
         }
@@ -1804,7 +1804,7 @@ function Test-ADBIntegrity {
         }
         
         # Calculate hash
-        $hash = (Get-FileHash -Path $ADBPath -Algorithm SHA256).Hash.ToUpper()
+        $hash = (Get-FileHash -Path $ADBPath -Algorithm SHA256).Hash.ToUpperInvariant()
         Write-Log "ADB Binary Hash (SHA256): $hash" -Level INFO
         Write-Log "ADB Binary Size: $([math]::Round($fileSize/1MB, 2))MB" -Level INFO
         Write-Log "ADB Binary Date: $($fileInfo.LastWriteTime)" -Level INFO
@@ -2171,7 +2171,7 @@ function Get-AndroidFileList {
                 
                 # Filter by extensions if specified
                 if ($Extensions.Count -gt 0) {
-                    $ext = [System.IO.Path]::GetExtension($trimmed).ToLower()
+                    $ext = [System.IO.Path]::GetExtension($trimmed).ToLowerInvariant()
                     if ($Extensions -contains $ext) {
                         [void]$files.Add($trimmed)
                     }
@@ -2308,7 +2308,7 @@ function Get-AndroidFileListWithSize {
                 
                 # Filter by extensions if specified
                 if ($Extensions.Count -gt 0) {
-                    $ext = [System.IO.Path]::GetExtension($filePath).ToLower()
+                    $ext = [System.IO.Path]::GetExtension($filePath).ToLowerInvariant()
                     if ($Extensions -notcontains $ext) {
                         continue
                     }
@@ -2384,7 +2384,7 @@ function Get-AndroidFileHash {
         }
         
         # Parse output: "hash  filename"
-        $hash = ($output -split '\s+')[0].Trim().ToLower()
+        $hash = ($output -split '\s+')[0].Trim().ToLowerInvariant()
         
         Write-AuditLog -Action "CalculateHash" -Resource $FilePath `
                       -Result "Success" -Details "Hash calculated successfully"
@@ -2426,7 +2426,7 @@ function Get-WindowsFileHash {
                       -Result "Attempt" -Details "Algorithm: $Algorithm, Platform: Windows"
         
         $hashResult = Get-FileHash -Path $FilePath -Algorithm $Algorithm
-        $hashString = $hashResult.Hash.ToLower()
+        $hashString = $hashResult.Hash.ToLowerInvariant()
         
         Write-AuditLog -Action "CalculateHash" -Resource $FilePath `
                       -Result "Success" -Details "Hash calculated successfully"
@@ -3144,7 +3144,12 @@ function Show-Disclaimer {
 
     while ($true) {
         Write-Host "  Accept and continue? (Y/N): " -ForegroundColor White -NoNewline
-        $response = Read-Host
+        $response = (Read-Host).Trim()
+
+        if ([string]::IsNullOrEmpty($response)) {
+            Write-Host "  Please enter Y or N." -ForegroundColor DarkYellow
+            continue
+        }
 
         if ($response.Equals("Y", [System.StringComparison]::OrdinalIgnoreCase)) {
             Write-Log "User accepted disclaimer" -Level INFO -NoConsole
@@ -3487,12 +3492,12 @@ function Show-CustomTransferMenu {
     # Options
     Write-Host ""
     Write-Host "  Include subdirectories? (Y/N): " -ForegroundColor White -NoNewline
-    $recursiveChoice = Read-Host
-    $recursive = $recursiveChoice.Equals("Y", [System.StringComparison]::OrdinalIgnoreCase)
+    $recursiveChoice = (Read-Host).Trim()
+    $recursive = (-not [string]::IsNullOrEmpty($recursiveChoice)) -and $recursiveChoice.Equals("Y", [System.StringComparison]::OrdinalIgnoreCase)
 
     Write-Host "  Hash verification? (Y/N) [Y]: " -ForegroundColor White -NoNewline
-    $verifyChoice = Read-Host
-    $verify = -not $verifyChoice.Equals("N", [System.StringComparison]::OrdinalIgnoreCase)
+    $verifyChoice = (Read-Host).Trim()
+    $verify = [string]::IsNullOrEmpty($verifyChoice) -or (-not $verifyChoice.Equals("N", [System.StringComparison]::OrdinalIgnoreCase))
 
     $script:TransferStats = @{
         TotalFiles = 0
