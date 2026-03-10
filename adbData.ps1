@@ -3337,17 +3337,13 @@ function Show-DeviceSelection {
         if ($index -ge 0 -and $index -lt $devices.Count) {
             $selectedDevice = $devices[$index]
 
-            if ($selectedDevice.State -eq "unauthorized") {
-                Write-Host ""
-                Write-Host "  ! Device not authorized. Check the USB debugging prompt on your device." -ForegroundColor Yellow
-                Write-Host "  Press Enter to go back..." -ForegroundColor DarkGray -NoNewline
-                $null = Read-Host
-                return $null
-            }
-
             if ($selectedDevice.State -ne "device") {
                 Write-Host ""
-                Write-Host "  ! Device not ready. Status: $($selectedDevice.State)" -ForegroundColor Yellow
+                if ($selectedDevice.State -eq "unauthorized") {
+                    Write-Host "  ! Device not authorized. Check the USB debugging prompt on your device." -ForegroundColor Yellow
+                } else {
+                    Write-Host "  ! Device not ready. Status: $($selectedDevice.State)" -ForegroundColor Yellow
+                }
                 Write-Host "  Press Enter to go back..." -ForegroundColor DarkGray -NoNewline
                 $null = Read-Host
                 return $null
@@ -3669,8 +3665,9 @@ function Show-DeviceInfo {
 
     # Get storage info
     try {
-        $storageInfo = & $script:ADB -s $script:CurrentDevice.ID shell "df -h /sdcard" 2>&1 | Select-Object -Skip 1
-        Write-Host "    Storage       $($storageInfo.Trim())" -ForegroundColor DarkGray
+        $storageInfo = & $script:ADB -s $script:CurrentDevice.ID shell "df /sdcard" 2>&1 | Select-Object -Skip 1
+        $storageText = if ($storageInfo -is [System.Array]) { $storageInfo -join " " } else { [string]$storageInfo }
+        Write-Host "    Storage       $($storageText.Trim())" -ForegroundColor DarkGray
     }
     catch {
         Write-Host "    Storage       Unable to retrieve" -ForegroundColor DarkGray
