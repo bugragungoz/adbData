@@ -1,88 +1,187 @@
 {
-    "presets":  [
-                    {
-                        "id":  "camera_photos",
-                        "name":  "[CAMERA] Photos",
-                        "description":  "Transfer all photos from camera",
-                        "source_paths":  [
-                                             "/sdcard/DCIM/Camera/"
-                                         ],
-                        "destination":  "Pictures/Phone Camera/{date}/",
-                        "filters":  {
-                                        "extensions":  [
-                                                           ".jpg",
-                                                           ".jpeg",
-                                                           ".png",
-                                                           ".heic",
-                                                           ".dng"
-                                                       ]
-                                    },
-                        "options":  {
-                                        "recursive":  false,
-                                        "verify":  true,
-                                        "organize_by":  "date"
-                                    }
-                    },
-                    {
-                        "id":  "camera_videos",
-                        "name":  "[VIDEO] Camera Videos",
-                        "description":  "Transfer videos from camera",
-                        "source_paths":  [
-                                             "/sdcard/DCIM/Camera/"
-                                         ],
-                        "destination":  "Videos/Phone Camera/{date}/",
-                        "filters":  {
-                                        "extensions":  [
-                                                           ".mp4",
-                                                           ".mov",
-                                                           ".avi",
-                                                           ".3gp"
-                                                       ]
-                                    },
-                        "options":  {
-                                        "recursive":  false,
-                                        "verify":  true
-                                    }
-                    },
-                    {
-                        "id":  "whatsapp_media",
-                        "name":  "[WHATSAPP] Media",
-                        "description":  "Backup WhatsApp photos and videos",
-                        "source_paths":  [
-                                             "/sdcard/WhatsApp/Media/"
-                                         ],
-                        "destination":  "Backups/WhatsApp/{date}/",
-                        "options":  {
-                                        "recursive":  true,
-                                        "verify":  true
-                                    }
-                    },
-                    {
-                        "id":  "screenshots",
-                        "name":  "[SCREEN] Screenshots",
-                        "description":  "Transfer all screenshots",
-                        "source_paths":  [
-                                             "/sdcard/Pictures/Screenshots/",
-                                             "/sdcard/Screenshots/"
-                                         ],
-                        "destination":  "Pictures/Screenshots/{date}/",
-                        "options":  {
-                                        "recursive":  false,
-                                        "verify":  true
-                                    }
-                    },
-                    {
-                        "id":  "downloads",
-                        "name":  "[DOWNLOAD] Files",
-                        "description":  "Transfer downloaded files",
-                        "source_paths":  [
-                                             "/sdcard/Download/"
-                                         ],
-                        "destination":  "Downloads/Phone/",
-                        "options":  {
-                                        "recursive":  false,
-                                        "verify":  true
-                                    }
-                    }
-                ]
+    "presets": [
+        {
+            "id": "camera_photos",
+            "name": "Camera Photos",
+            "description": "Photos from camera (DCIM/Camera)",
+            "source_paths": ["/sdcard/DCIM/Camera/"],
+            "destination": "Photos/Camera/{date}/",
+            "filters": {
+                "extensions": [".jpg", ".jpeg", ".png", ".heic", ".dng", ".webp", ".raw", ".bmp", ".gif"]
+            },
+            "options": {
+                "recursive": false,
+                "verify": true,
+                "organize_by": "date"
+            }
+        },
+        {
+            "id": "camera_videos",
+            "name": "Camera Videos",
+            "description": "Videos from camera (DCIM/Camera)",
+            "source_paths": ["/sdcard/DCIM/Camera/"],
+            "destination": "Videos/Camera/{date}/",
+            "filters": {
+                "extensions": [".mp4", ".mov", ".avi", ".3gp", ".mkv", ".webm"]
+            },
+            "options": {
+                "recursive": false,
+                "verify": true
+            }
+        },
+        {
+            "id": "all_dcim",
+            "name": "All DCIM",
+            "description": "Everything in DCIM (all camera apps)",
+            "source_paths": ["/sdcard/DCIM/"],
+            "destination": "Photos/DCIM/{date}/",
+            "options": {
+                "recursive": true,
+                "verify": true
+            }
+        },
+        {
+            "id": "screenshots",
+            "name": "Screenshots",
+            "description": "All screenshots",
+            "source_paths": ["/sdcard/Pictures/Screenshots/", "/sdcard/Screenshots/", "/sdcard/DCIM/Screenshots/"],
+            "destination": "Photos/Screenshots/{date}/",
+            "options": {
+                "recursive": false,
+                "verify": true
+            }
+        },
+        {
+            "id": "pictures",
+            "name": "All Pictures",
+            "description": "Everything in Pictures folder",
+            "source_paths": ["/sdcard/Pictures/"],
+            "destination": "Photos/Pictures/{date}/",
+            "options": {
+                "recursive": true,
+                "verify": true
+            }
+        },
+        {
+            "id": "movies",
+            "name": "Movies",
+            "description": "Movies and video files",
+            "source_paths": ["/sdcard/Movies/"],
+            "destination": "Videos/Movies/{date}/",
+            "options": {
+                "recursive": true,
+                "verify": true
+            }
+        },
+        {
+            "id": "downloads",
+            "name": "Downloads",
+            "description": "Downloaded files",
+            "source_paths": ["/sdcard/Download/"],
+            "destination": "Downloads/{date}/",
+            "options": {
+                "recursive": true,
+                "verify": true
+            }
+        },
+        {
+            "id": "music",
+            "name": "Music",
+            "description": "Music files",
+            "source_paths": ["/sdcard/Music/"],
+            "destination": "Music/",
+            "options": {
+                "recursive": true,
+                "verify": true
+            }
+        },
+        {
+            "id": "documents",
+            "name": "Documents",
+            "description": "Document files",
+            "source_paths": ["/sdcard/Documents/"],
+            "destination": "Documents/",
+            "options": {
+                "recursive": true,
+                "verify": true
+            }
+        },
+        {
+            "id": "whatsapp_media",
+            "name": "WhatsApp Media",
+            "description": "WhatsApp photos, videos, audio",
+            "source_paths": ["/sdcard/WhatsApp/Media/", "/sdcard/Android/media/com.whatsapp/WhatsApp/Media/"],
+            "destination": "Apps/WhatsApp/{date}/",
+            "options": {
+                "recursive": true,
+                "verify": true
+            }
+        },
+        {
+            "id": "telegram",
+            "name": "Telegram",
+            "description": "Telegram media and files",
+            "source_paths": ["/sdcard/Telegram/", "/sdcard/Android/media/org.telegram.messenger/Telegram/"],
+            "destination": "Apps/Telegram/{date}/",
+            "options": {
+                "recursive": true,
+                "verify": true
+            }
+        },
+        {
+            "id": "instagram",
+            "name": "Instagram",
+            "description": "Instagram saved media",
+            "source_paths": ["/sdcard/Instagram/", "/sdcard/Pictures/Instagram/", "/sdcard/DCIM/Instagram/"],
+            "destination": "Apps/Instagram/{date}/",
+            "options": {
+                "recursive": true,
+                "verify": true
+            }
+        },
+        {
+            "id": "voice_records",
+            "name": "Voice Recordings",
+            "description": "Voice recorder and call recordings",
+            "source_paths": ["/sdcard/Recordings/", "/sdcard/Recording/", "/sdcard/Voice Recorder/", "/sdcard/Call/"],
+            "destination": "Recordings/{date}/",
+            "options": {
+                "recursive": true,
+                "verify": true
+            }
+        },
+        {
+            "id": "bluetooth",
+            "name": "Bluetooth",
+            "description": "Files received via Bluetooth",
+            "source_paths": ["/sdcard/Bluetooth/", "/sdcard/Download/Bluetooth/"],
+            "destination": "Bluetooth/",
+            "options": {
+                "recursive": true,
+                "verify": true
+            }
+        },
+        {
+            "id": "ringtones_notifications",
+            "name": "Ringtones & Notifications",
+            "description": "Custom ringtones and notification sounds",
+            "source_paths": ["/sdcard/Ringtones/", "/sdcard/Notifications/", "/sdcard/Alarms/"],
+            "destination": "Sounds/",
+            "options": {
+                "recursive": true,
+                "verify": true
+            }
+        },
+        {
+            "id": "podcasts",
+            "name": "Podcasts",
+            "description": "Downloaded podcasts",
+            "source_paths": ["/sdcard/Podcasts/"],
+            "destination": "Podcasts/",
+            "options": {
+                "recursive": true,
+                "verify": true
+            }
+        }
+    ]
 }
