@@ -1,0 +1,3 @@
+## 2024-03-12 - List[T] avoids boxing overhead in PowerShell tight loops
+**Learning:** System.Collections.ArrayList imposes boxing/unboxing overhead and requires `.Add()` calls to be cast to `[void]` to suppress pipeline output of the added index, which slows down high-frequency execution.
+**Action:** Always prefer `[System.Collections.Generic.List[T]]` (e.g., `List[string]`, `List[object]`) over `ArrayList` for large collections in PowerShell, as it enforces type safety, prevents boxing, and returns `void` natively on `.Add()`, eliminating the need for `[void]` casts.
