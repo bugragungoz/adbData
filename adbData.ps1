@@ -713,7 +713,9 @@ function Clear-SensitiveData {
         [Parameter(Mandatory=$true)]
         [ref]$Variable,
         
-        [int]$OverwritePasses = 3
+        [int]$OverwritePasses = 1,
+
+        [switch]$ForceGC
     )
     
     try {
@@ -769,9 +771,11 @@ function Clear-SensitiveData {
         $Variable.Value = $null
         
         # Force garbage collection
-        [System.GC]::Collect()
-        [System.GC]::WaitForPendingFinalizers()
-        [System.GC]::Collect()
+        if ($ForceGC) {
+            [System.GC]::Collect()
+            [System.GC]::WaitForPendingFinalizers()
+            [System.GC]::Collect()
+        }
         
         Write-Log "Sensitive data securely cleared from memory" -Level DEBUG
     }
@@ -2285,7 +2289,7 @@ function Get-AndroidFileListWithSize {
             return @()
         }
         
-        $results = New-Object System.Collections.ArrayList
+        $results = [System.Collections.Generic.List[object]]::new()
         $count = 0
         $MAX_FILES = 100000  # Resource exhaustion protection
         
@@ -2316,7 +2320,7 @@ function Get-AndroidFileListWithSize {
                     Size = $size
                 }
                 
-                [void]$results.Add($fileInfo)
+                $results.Add($fileInfo)
                 
                 # Garbage collection for large lists
                 $count++
