@@ -1,0 +1,3 @@
+## 2025-03-01 - Replace ArrayList with Generic List for performance
+**Learning:** `System.Collections.ArrayList` is an older, non-generic collection that introduces boxing/unboxing overhead and worse performance compared to `System.Collections.Generic.List[T]`. Furthermore, `ArrayList.Add()` returns the index of the added item (often requiring a `[void]` cast to suppress unwanted output in PowerShell), whereas `List[T].Add()` returns `void`, making the cast unnecessary.
+**Action:** Always prefer `[System.Collections.Generic.List[T]]` (e.g. `[string]`, `[psobject]`) over `ArrayList` for high-frequency operations or large collections. When doing this replacement, remember to remove any `[void]` casts on the `.Add()` calls.

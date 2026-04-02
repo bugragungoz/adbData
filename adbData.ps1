@@ -1989,14 +1989,14 @@ function Get-ADBDevices {
         
         Write-Log "ADB devices raw output: $output" -Level DEBUG
         
-        # Use ArrayList for better performance and predictable behavior
-        $deviceList = [System.Collections.ArrayList]::new()
+        # Use List[T] for better performance and predictable behavior
+        $deviceList = [System.Collections.Generic.List[psobject]]::new()
         
         # Handle both Windows (CRLF) and Unix (LF) line endings
         $lines = $output -split '\r?\n'
         
         # Skip the header line "List of devices attached"
-        $deviceLines = [System.Collections.ArrayList]::new()
+        $deviceLines = [System.Collections.Generic.List[string]]::new()
         $foundHeader = $false
         foreach ($line in $lines) {
             if ($line -match '^List of devices attached') {
@@ -2004,16 +2004,16 @@ function Get-ADBDevices {
                 continue
             }
             if ($foundHeader) {
-                [void]$deviceLines.Add($line)
+                $deviceLines.Add($line)
             }
         }
         
         # If no header found, try skipping first line anyway (fallback)
         if (-not $foundHeader -and $lines.Count -gt 1) {
             Write-Log "ADB devices header not found, using fallback parsing" -Level DEBUG
-            $deviceLines = [System.Collections.ArrayList]::new()
+            $deviceLines = [System.Collections.Generic.List[string]]::new()
             for ($i = 1; $i -lt $lines.Count; $i++) {
-                [void]$deviceLines.Add($lines[$i])
+                $deviceLines.Add($lines[$i])
             }
         }
         
@@ -2056,7 +2056,7 @@ function Get-ADBDevices {
             
             Write-Log "Found device: ID=$deviceID, State=$state, Model=$model" -Level DEBUG
             
-            [void]$deviceList.Add($device)
+            $deviceList.Add($device)
         }
         
         Write-Log "Total devices found: $($deviceList.Count)" -Level INFO
@@ -2142,8 +2142,8 @@ function Get-AndroidFileList {
             $findCmd = "find '$Path' -maxdepth 1 -type f"
         }
         
-        # Memory optimization: Use ArrayList for better performance
-        $files = New-Object System.Collections.ArrayList
+        # Memory optimization: Use List[T] for better performance
+        $files = New-Object System.Collections.Generic.List[string]
         $count = 0
         $MAX_FILES = 100000  # Prevent resource exhaustion
         
@@ -2170,11 +2170,11 @@ function Get-AndroidFileList {
                 if ($Extensions.Count -gt 0) {
                     $ext = [System.IO.Path]::GetExtension($trimmed).ToLower()
                     if ($Extensions -contains $ext) {
-                        [void]$files.Add($trimmed)
+                        $files.Add($trimmed)
                     }
                 }
                 else {
-                    [void]$files.Add($trimmed)
+                    $files.Add($trimmed)
                 }
                 
                 # Force garbage collection periodically to prevent memory leak
@@ -2285,7 +2285,7 @@ function Get-AndroidFileListWithSize {
             return @()
         }
         
-        $results = New-Object System.Collections.ArrayList
+        $results = New-Object System.Collections.Generic.List[psobject]
         $count = 0
         $MAX_FILES = 100000  # Resource exhaustion protection
         
@@ -2316,7 +2316,7 @@ function Get-AndroidFileListWithSize {
                     Size = $size
                 }
                 
-                [void]$results.Add($fileInfo)
+                $results.Add($fileInfo)
                 
                 # Garbage collection for large lists
                 $count++
