@@ -1,0 +1,3 @@
+## 2026-04-09 - Replace ArrayList with Generic.List
+**Learning:** System.Collections.ArrayList is deprecated in favor of System.Collections.Generic.List[T] which provides better type safety and performance, especially in loops where boxing/unboxing overhead can be avoided. Additionally, Generic.List.Add() returns void, eliminating the need for `[void]` casts which also slightly reduces overhead.
+**Action:** Always prefer `[System.Collections.Generic.List[T]]` over `[System.Collections.ArrayList]` or standard PowerShell arrays when iteratively building collections in performance-critical paths.
