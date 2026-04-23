@@ -1,0 +1,1 @@
+. ./adbData.ps1
