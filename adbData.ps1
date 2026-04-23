@@ -1034,6 +1034,19 @@ function Initialize-ResumeDB {
     if (Test-Path $script:ResumeDBFile) {
         try {
             $script:ResumeDB = Get-Content $script:ResumeDBFile -Raw | ConvertFrom-Json -AsHashtable
+
+            # Convert arrays back to HashSets for O(1) lookups
+            if ($script:ResumeDB.Sessions) {
+                foreach ($session in $script:ResumeDB.Sessions.Values) {
+                    if ($session.CompletedFiles -is [array]) {
+                        $session.CompletedFiles = [System.Collections.Generic.HashSet[string]]::new([string[]]$session.CompletedFiles, [System.StringComparer]::OrdinalIgnoreCase)
+                    }
+                    if ($session.FailedFiles -is [array]) {
+                        $session.FailedFiles = [System.Collections.Generic.HashSet[string]]::new([string[]]$session.FailedFiles, [System.StringComparer]::OrdinalIgnoreCase)
+                    }
+                }
+            }
+
             Write-Log "Resume database loaded" -Level DEBUG
         }
         catch {
@@ -1062,7 +1075,41 @@ function Save-ResumeDB {
     try {
         if ($null -eq $script:ResumeDB) { return }
         
-        $script:ResumeDB | ConvertTo-Json -Depth 10 | Out-File -FilePath $script:ResumeDBFile -Encoding UTF8 -Force
+        # Convert HashSets to arrays before serialization to prevent JSON conversion errors
+        $dbToSave = @{
+            Sessions = @{}
+            LastSession = $script:ResumeDB.LastSession
+        }
+
+        if ($script:ResumeDB.Sessions) {
+            foreach ($key in $script:ResumeDB.Sessions.Keys) {
+                $session = $script:ResumeDB.Sessions[$key]
+                $dbToSave.Sessions[$key] = @{
+                    SessionID = $session.SessionID
+                    DeviceID = $session.DeviceID
+                    SourcePath = $session.SourcePath
+                    DestinationPath = $session.DestinationPath
+                    TransferType = $session.TransferType
+                    StartTime = $session.StartTime
+                    Status = $session.Status
+                    TotalFiles = $session.TotalFiles
+                }
+
+                if ($session.CompletedFiles -is [System.Collections.Generic.HashSet[string]]) {
+                    $dbToSave.Sessions[$key].CompletedFiles = [System.Collections.Generic.List[string]]::new($session.CompletedFiles)
+                } else {
+                    $dbToSave.Sessions[$key].CompletedFiles = $session.CompletedFiles
+                }
+
+                if ($session.FailedFiles -is [System.Collections.Generic.HashSet[string]]) {
+                    $dbToSave.Sessions[$key].FailedFiles = [System.Collections.Generic.List[string]]::new($session.FailedFiles)
+                } else {
+                    $dbToSave.Sessions[$key].FailedFiles = $session.FailedFiles
+                }
+            }
+        }
+
+        $dbToSave | ConvertTo-Json -Depth 10 | Out-File -FilePath $script:ResumeDBFile -Encoding UTF8 -Force
         Write-Log "Resume database saved" -Level DEBUG
     }
     catch {
@@ -1095,8 +1142,8 @@ function New-TransferSession {
         TransferType = $TransferType
         StartTime = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
         Status = "InProgress"
-        CompletedFiles = @()
-        FailedFiles = @()
+        CompletedFiles = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+        FailedFiles = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
         TotalFiles = 0
     }
     
@@ -1131,20 +1178,14 @@ function Update-TransferSession {
     
     switch ($Status) {
         'Completed' {
-            if ($session.CompletedFiles -notcontains $FilePath) {
-                $session.CompletedFiles += $FilePath
-            }
+            [void]$session.CompletedFiles.Add($FilePath)
         }
         'Failed' {
-            if ($session.FailedFiles -notcontains $FilePath) {
-                $session.FailedFiles += $FilePath
-            }
+            [void]$session.FailedFiles.Add($FilePath)
         }
         'Skipped' {
             # Treat skipped as completed
-            if ($session.CompletedFiles -notcontains $FilePath) {
-                $session.CompletedFiles += $FilePath
-            }
+            [void]$session.CompletedFiles.Add($FilePath)
         }
     }
     
