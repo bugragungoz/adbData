@@ -1295,8 +1295,19 @@ function Write-Log {
         
         # Add context if provided
         if ($Context.Count -gt 0) {
-            $contextStr = ($Context.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" }) -join ', '
-            $humanLog += " | Context: $contextStr"
+            # ⚡ Bolt: Performance optimization - Replace pipeline with StringBuilder to reduce allocation overhead in hot path
+            $sb = [System.Text.StringBuilder]::new()
+            $first = $true
+            foreach ($entry in $Context.GetEnumerator()) {
+                if (-not $first) {
+                    [void]$sb.Append(", ")
+                }
+                [void]$sb.Append($entry.Key)
+                [void]$sb.Append("=")
+                [void]$sb.Append($entry.Value)
+                $first = $false
+            }
+            $humanLog += " | Context: $($sb.ToString())"
         }
         
         # Thread-safe file write with retry
