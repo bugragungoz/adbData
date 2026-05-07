@@ -1,0 +1,3 @@
+## 2024-05-24 - PowerShell List[T] vs ArrayList Performance
+**Learning:** In PowerShell, `System.Collections.ArrayList` is less performant and its `.Add()` method returns the index of the added element, which pollutes the pipeline if not cast to `[void]`. `System.Collections.Generic.List[T]` is faster, provides type safety, and its `.Add()` method returns `void`, eliminating the need for `[void]` casting and overhead.
+**Action:** Always prefer `[System.Collections.Generic.List[T]]::new()` over `New-Object System.Collections.ArrayList` or `[System.Collections.ArrayList]::new()` for performance-critical loops, and remove unnecessary `[void]` casts when making the transition.
