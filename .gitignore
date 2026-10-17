@@ -1,21 +1,18 @@
-# Log files
-logs/
+# Dependencies and builds
+node_modules/
+dist/
+target/
+src-tauri/gen/schemas/
+
+# Screenshots made by `npm run shots` land in docs/images; test output does not stay
+tests/ui/output/
+
+# Logs and editor files
 *.log
+.vscode/*
+!.vscode/extensions.json
+.idea/
 
-# Config files (user-specific)
-config/settings.json
-config/resume.json
-
-# Temp files
-temp/
-*.tmp
-
-# Verification cache
-verification/
-
-# Windows
+# OS
+.DS_Store
 Thumbs.db
-desktop.ini
-
-# PowerShell
-*.ps1~

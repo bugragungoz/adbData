@@ -1,202 +1,122 @@
 # adbData
 
-High-performance Android file transfer via ADB with cryptographic integrity verification and security hardening.
+<img src="src-tauri/icons/128x128.png" align="left" width="96" height="96" alt="">
 
-![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)
-![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-lightgrey.svg)
-![PowerShell](https://img.shields.io/badge/PowerShell-5.1%2B-blue.svg)
-![License](https://img.shields.io/badge/license-MIT-green.svg)
+Copy photos, videos and files between an Android phone and a Windows PC, fast.
 
-> **⚠️ DISCLAIMER**  
-> This software is provided as-is without any warranty. It has **not been extensively tested** in production environments.  
-> Use at your own risk. The author is not responsible for any data loss, corruption, or damage.  
-> Always backup your data before performing any file transfer operations.
+adbData is a Windows app that copies files over adb instead of Windows' own phone connection
+(MTP): faster, without the connection dropping half way, and keeping each file's date. Browse the
+phone, pick files or whole folders, see what will happen, and copy. Copying a folder again copies
+only what is new. The phone needs no app and no root.
 
-## Overview
+<br clear="left">
 
-ADB-based file transfer utility addressing MTP protocol limitations (connection instability, data corruption, performance degradation). Implements cryptographic hash verification, atomic operations, and comprehensive security controls.
+> **Not fully tested yet.** Version 2.0.0 is tested against a simulated adb server that behaves
+> like a phone (including a cable pulled out half way), and on GitHub's Windows runners it
+> downloads Google's real adb and talks to its server. It has not been used with a real phone yet.
 
-**Core Features:**
-- Cryptographic integrity verification (MD5/SHA256)
-- Incremental transfer with resume capability
-- Batch-optimized operations (250x faster enumeration)
-- Optional parallel transfer (experimental)
-- Command injection and path traversal protection
-- JSONL audit logging with rate limiting
+![The Phone page: the camera folder of a made-up phone, four photos selected](docs/images/phone.png)
 
-## Requirements
+## What it does
 
-- Windows 10+ / PowerShell 5.1+
-- ADB-enabled Android device (USB debugging)
-- Platform tools included in `platform-tools/`
+- **Copies fast.** adbData talks to adb's server directly, the way adb itself does, and copies a
+  whole folder over one connection. The old script started two programs for every file, and more
+  to check sizes and checksums; with thousands of photos that was most of the time.
+- **Browses the phone.** Camera, Screenshots, Pictures, Downloads, Documents, Music, Movies and
+  Recordings are one click away; filter by photos, videos, audio or documents. Hidden files (the
+  phone's trash, thumbnails) stay out unless you want them.
+- **Shows what will happen first.** Before anything is copied: how many files, how much, which
+  are already on the PC, which names Windows does not allow, and whether there is room.
+- **Copies again without copying twice.** A file already on the PC with the same name and size is
+  skipped, so an interrupted copy, or next month's photos, picks up where it stopped. You can also
+  keep both or replace.
+- **Keeps dates and names.** Copies keep the phone's modification time, so photos sort by when
+  they were taken. Turkish and other non-English names work; names Windows refuses (`12:30`,
+  `what?`) are copied with `_` in place of those characters.
+- **Never leaves half a file.** Each file is written under a temporary name and renamed when it is
+  complete. If the cable comes out, adbData reconnects and tries that file again; if the phone is
+  gone, it stops and says which files were not copied.
+- **Checks copies if you ask.** Compares each copy's MD5 with the phone's, in batches, and removes a
+  copy that differs so copying again fixes it.
+- **Sends files to the phone too**, into the folder you are looking at.
+- **Keeps a history** of every copy, with what failed and why.
+- English and Turkish, light and dark theme, on the Bugra design system.
 
-## Installation
+![Before a copy: 58 new files, 90 already on the PC and skipped, and the options](docs/images/review.png)
 
-```powershell
-# Clone repository
-git clone https://github.com/bugragungoz/adbData.git
-cd adbData
+## Download
 
-# Execute main script
-.\adbData.ps1
+From [Releases](https://github.com/bugragungoz/adbData/releases): the `.exe` installer (for your
+account) or the `.msi` (for every account). Windows 10 and 11, 64-bit.
+
+## Use
+
+1. On the phone: Settings > About phone, tap Build number seven times, then turn on USB debugging in
+   Developer options.
+2. Connect it with a cable that carries data. Unlock the phone and allow USB debugging for this
+   computer (tick Always allow).
+3. No adb on the computer? adbData offers to download Google's platform-tools (about 7 MB) into its
+   own folder.
+4. Pick files or folders and choose **Copy to this PC**, or **Copy everything shown**. Check the
+   review and start.
+
+The phone does not need to be in file transfer (MTP) mode; charging only is fine. A USB 3 port and
+cable can copy faster, when the phone supports USB 3.
+
+![A copy running: 42 %, speed, time left and the file being copied](docs/images/copy.png)
+
+## Where things are kept
+
+| What | Where |
+|---|---|
+| Copies from the phone | `Desktop\adbData` unless you choose another folder in Settings or before a copy |
+| Settings | `%APPDATA%\com.bugragungoz.adbdata\settings.json` |
+| History | `%LOCALAPPDATA%\com.bugragungoz.adbdata\history.json` (the last 300 copies) |
+| Downloaded platform-tools | `%LOCALAPPDATA%\com.bugragungoz.adbdata\platform-tools\` |
+
+![History: what each copy did, and the files the phone refused](docs/images/history.png)
+
+## From the script
+
+Version 1 was a PowerShell script with a menu. Besides being slow with many files, it had bugs that
+version 2 does not have:
+
+- Paths containing `&`, `;`, `|`, `$`, `<`, `>`, `\` or a backtick were refused as "dangerous",
+  so a file like `Tom & Jerry.mp4` could not be copied at all. adbData sends paths to the phone as
+  data, and quotes them where it uses the phone's shell (for the checksum check), so every name
+  works.
+- Copies got the date they were copied, not the phone's.
+- Listing a folder ran `stat` once for every file on the phone.
+- "Parallel" mode copied in batches, one file at a time.
+- The repository carried Google's platform-tools and a phone maker's USB driver installer. adbData
+  downloads platform-tools from Google when needed; USB drivers come from Windows Update or the
+  phone's maker.
+
+The script is in the history of this repository.
+
+## Build it yourself
+
+```bash
+npm ci                    # the interface's packages
+npm run dev               # the app, with the window reloading as you edit
+npm run verify            # versions, translations, lint, colors, types and the interface's unit tests
+cargo test --workspace    # the Rust core (against a simulated adb server) and the app's shell
+npm run test:ui           # the built interface in Chromium against a simulated phone
+npm run shots             # the screenshots above
+npm run icons             # the Windows icons from docs/design/icon.svg
+npm run build             # the installers (on Windows)
 ```
 
-### Execution Policy Error Fix
+`cargo test -p adbdata-core --test network -- --include-ignored` downloads Google's platform-tools
+and checks adbData's protocol code against the real adb server.
 
-If you encounter `"cannot be loaded. The file is not digitally signed"` error:
-
-**Option 1 (Recommended):** Unblock the file
-```powershell
-Unblock-File -Path .\adbData.ps1
-.\adbData.ps1
-```
-
-**Option 2:** Bypass execution policy for current session
-```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-.\adbData.ps1
-```
-
-**Option 3:** Run with bypass flag (one-liner)
-```powershell
-powershell -ExecutionPolicy Bypass -File .\adbData.ps1
-```
-
-**Option 4:** Set user-level policy (permanent)
-```powershell
-Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned -Force
-.\adbData.ps1
-```
-
-## Architecture
-
-### Performance Characteristics
-- 2-3x throughput vs MTP (large files)
-- 5-10x throughput vs MTP (small files)
-- Batch enumeration: 250x faster than individual queries
-- Configurable hash threshold: skip verification <100MB
-- Optional parallel mode: 3 concurrent threads for files <10MB
-
-### Security Model
-- Command injection prevention (whitelist validation, parameter escaping)
-- Path traversal blocking (10+ attack pattern detection)
-- ADB binary verification (SHA256 whitelist)
-- Exclusive file locking (race condition prevention)
-- Memory wiping (secure data disposal)
-- Rate limiting: 50 req/sec, 1000 req/min
-- Timing-safe cryptographic comparison
-
-### Transfer Mechanics
-- Atomic operations (no partial file corruption)
-- Session persistence (`config/resume.json`)
-- Incremental sync (skip existing files)
-- Real-time progress tracking with ETA
-- Automatic disk space validation
-
----
-
-## Configuration
-
-Configuration file: `config/settings.json` (auto-generated on first run)
-
-```json
-{
-  "DefaultDestination": "C:\\Users\\YourName\\Desktop\\adbData",
-  "AlwaysVerifyHash": true,
-  "HashAlgorithm": "MD5",
-  "MaxRetries": 3,
-  "RetryDelaySeconds": 5,
-  
-  "SmallFileThreshold": 104857600,
-  "BatchSizeQueryLimit": 10000,
-  "GCInterval": 1000,
-  
-  "EnableParallelTransfer": false,
-  "ParallelThreadCount": 3,
-  "ParallelFileThreshold": 10485760,
-  
-  "SanitizePaths": true,
-  "ValidateADBSignature": false
-}
-```
-
-**Parameter Reference:**
-- `SmallFileThreshold`: Hash verification bypass threshold (100MB default)
-- `BatchSizeQueryLimit`: Maximum batch enumeration size (10K files)
-- `GCInterval`: Garbage collection trigger interval (1000 files)
-- `EnableParallelTransfer`: Concurrent transfer mode (experimental, disabled by default)
-- `ParallelThreadCount`: Parallel worker count (3 threads)
-- `ParallelFileThreshold`: Parallel eligibility threshold (10MB)
-- `SanitizePaths`: Path security validation (recommended: enabled)
-- `ValidateADBSignature`: Binary integrity verification (requires elevated privileges)
-
-## Usage
-
-**Preset Transfer:**
-```powershell
-# Launch interactive menu
-.\adbData.ps1
-
-# Select device → Choose preset (Camera/WhatsApp/Downloads/Screenshots)
-```
-
-**Custom Transfer:**
-```powershell
-# Manual path specification
-Source: /sdcard/DCIM/Camera/
-Destination: D:\Backup\Photos\
-```
-
-**Common Android Paths:**
-- `/sdcard/DCIM/Camera/` - Camera output
-- `/sdcard/Pictures/Screenshots/` - Screenshot storage
-- `/sdcard/WhatsApp/Media/` - WhatsApp media (Android <11)
-- `/sdcard/Android/media/com.whatsapp/WhatsApp/` - WhatsApp (Android 11+)
-- `/sdcard/Download/` - Download directory
-
-## Diagnostics
-
-**Connection Issues:**
-- Verify USB debugging authorization on device
-- Test ADB connectivity: `.\platform-tools\adb.exe devices`
-- Check USB cable and port (USB 3.0 recommended)
-
-**Transfer Failures:**
-- Validate available disk space
-- Check file lock status and device screen state
-- Review transfer logs: `logs/transfer_*.log`
-- Inspect audit trail: `logs/transfer_*_audit.jsonl`
-
-**Performance Optimization:**
-- Hash algorithm: MD5 (faster) vs SHA256 (more secure)
-- Adjust `SmallFileThreshold` based on file size distribution
-- Enable parallel mode for small file batches
-- Reduce `GCInterval` if memory constrained (500 recommended)
-
----
-
-## Project Structure
-
-```
-adbData/
-├── adbData.ps1                  # Main executable
-├── platform-tools/              # ADB binaries (bundled)
-├── config/                      # Runtime configuration
-│   ├── settings.json            # User preferences
-│   ├── presets.json             # Transfer templates
-│   └── resume.json              # Session state
-└── logs/                        # Telemetry and audit
-    ├── transfer_*.log           # Transfer events
-    ├── transfer_*_audit.jsonl   # Security audit trail
-    └── security_audit_*.log     # Security events
-```
+`npm run dev:web` runs the interface alone in a browser, against the simulated phone of
+`src/api/mock.ts`.
 
 ## License
 
-MIT License - See [LICENSE](LICENSE)
+[MIT](LICENSE)
 
-## Development
+The first version was developed with assistance from an AI model: Claude Sonnet 4.5.
 
-**Author:** Bugra  
-**AI Architecture:** Claude Sonnet 4.5 (Anthropic)  
-**ADB Platform:** Google Android SDK Platform Tools
+It was later rebuilt with Claude Opus 5.5.

@@ -1,0 +1,113 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  # The interface: locales, colors, lint, types and unit tests, then the built page in Chrome
+  # against the simulated phone.
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run verify
+
+      - name: UI tests
+        run: npm run test:ui
+        env:
+          CHROMIUM_PATH: /usr/bin/google-chrome
+
+  # The Rust core and the app on Windows: the core's tests against a simulated adb server (listing,
+  # copying both ways, a refused file, a pulled cable, a phone that is gone, checksums, stopping),
+  # then platform-tools from Google: downloaded, unpacked, and its real server asked through
+  # adbData's own protocol code.
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+
+      - run: npm ci
+
+      # The shell embeds the built page, so it has to exist before the Rust crates compile.
+      - run: npm run build:web
+
+      - run: cargo fmt --all -- --check
+
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - run: cargo test --workspace
+
+      - name: Against Google's real adb
+        run: cargo test -p adbdata-core --test network -- --include-ignored
+
+      - name: Installers
+        run: npx tauri build
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: adbData-installers
+          path: |
+            target/release/bundle/nsis/*.exe
+            target/release/bundle/msi/*.msi
+
+  # A push to main whose version (package.json, kept equal to the Tauri and Cargo versions) has no
+  # release yet publishes one: tag v<version> on that commit, both installers, and the version's
+  # CHANGELOG section as the notes. To release, raise the version and push.
+  release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [web, windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/download-artifact@v5
+        with:
+          name: adbData-installers
+          path: installers
+
+      - name: Publish the release if this version has none
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(node -p "require('./package.json').version")
+          tag="v$version"
+          # A draft is what a failed run leaves behind: replace it.
+          draft=$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json isDraft -q .isDraft 2> /dev/null || echo missing)
+          if [ "$draft" = "false" ]; then
+            echo "$tag is already released."
+            exit 0
+          elif [ "$draft" = "true" ]; then
+            gh release delete "$tag" --yes --repo "$GITHUB_REPOSITORY"
+          fi
+          awk -v v="$version" '
+            /^## / { if (found) exit; if (index($0, "## " v) == 1) { found = 1; next } }
+            found { print }
+          ' CHANGELOG.md > notes.md
+          # The artifact keeps the bundle folders: installers/nsis/*.exe and installers/msi/*.msi.
+          gh release create "$tag" installers/*/* --target "$GITHUB_SHA" --title "adbData $tag" --notes-file notes.md --repo "$GITHUB_REPOSITORY"

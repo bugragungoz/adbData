@@ -1,0 +1,51 @@
+{
+  "name": "adbdata",
+  "private": true,
+  "version": "2.0.0",
+  "type": "module",
+  "description": "Copy photos, videos and files between an Android phone and a Windows PC over adb, fast.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "tauri dev",
+    "dev:web": "vite",
+    "build": "tauri build",
+    "build:web": "vite build",
+    "tauri": "tauri",
+    "check:versions": "node tools/check-versions.mjs",
+    "check:locales": "node tools/check-locales.mjs",
+    "check:colors": "node tools/no-hard-coded-colors.mjs",
+    "lint": "eslint . && npm run check:colors",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "test:ui": "vite build && node tests/ui/run.mjs",
+    "shots": "vite build && node tests/ui/screenshots.mjs",
+    "verify": "npm run check:versions && npm run check:locales && npm run lint && npm run typecheck && npm test",
+    "icons": "tauri icon docs/design/icon.svg -o src-tauri/icons"
+  },
+  "dependencies": {
+    "@fontsource/geist-sans": "5.3.0",
+    "@fontsource/jetbrains-mono": "5.3.0",
+    "@preact/signals": "2.11.3",
+    "@tauri-apps/api": "2.12.4",
+    "@tauri-apps/plugin-dialog": "2.7.3",
+    "@tauri-apps/plugin-opener": "2.7.2",
+    "preact": "10.29.8"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.5",
+    "@tauri-apps/cli": "2.12.3",
+    "@testing-library/preact": "3.2.4",
+    "@types/node": "22.20.5",
+    "eslint": "9.39.5",
+    "globals": "17.13.0",
+    "jsdom": "25.0.1",
+    "playwright-core": "1.56.1",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.71.0",
+    "vite": "7.3.6",
+    "vitest": "4.1.5"
+  }
+}

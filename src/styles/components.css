@@ -1,0 +1,184 @@
+/* Bugra components, from docs/design/bugra/components/bundle.css, tuned for a dense desktop app.
+   Additions for a data app are marked (added) and listed in docs/design/ADDED.md. */
+
+/* ---- Button ---- */
+.bg-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2);
+  min-height: var(--control-sm); padding: 0 16px;
+  border: 1px solid var(--line-strong); border-radius: var(--pill);
+  background: transparent; color: var(--ink);
+  font-size: var(--text-button-size); font-weight: var(--text-button-weight); line-height: 1;
+  white-space: nowrap; text-decoration: none; cursor: pointer;
+  transition: background var(--dur-hover) var(--ease-out), border-color var(--dur-hover) var(--ease-out), color var(--dur-hover) var(--ease-out);
+}
+.bg-btn:hover { background: var(--surface-2); border-color: var(--ink); }
+.bg-btn:active { background: color-mix(in srgb, var(--ink) 10%, transparent); }
+.bg-btn-sm { min-height: 30px; padding: 0 12px; }
+.bg-btn-primary { background: var(--accent); border-color: var(--accent-ink); color: var(--on-accent); }
+.bg-btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-ink); }
+/* (added) quiet: no outline until hovered */
+.bg-btn-quiet { border-color: transparent; color: var(--muted); }
+.bg-btn-quiet:hover { color: var(--ink); border-color: transparent; }
+/* (added) danger: destructive action, warn outline and text */
+.bg-btn-danger { border-color: var(--warn); color: var(--warn); }
+.bg-btn-danger:hover { background: color-mix(in srgb, var(--warn) 12%, transparent); border-color: var(--warn); }
+.bg-btn:disabled, .bg-btn[aria-disabled='true'] { background: var(--disabled-fill); border-color: transparent; color: var(--disabled-ink); cursor: not-allowed; }
+.bg-btn .icon { width: var(--icon-promo); height: var(--icon-promo); }
+
+/* ---- Icon button ---- */
+.bg-iconbtn {
+  display: inline-grid; place-items: center; flex: none;
+  width: var(--control-sm); height: var(--control-sm); padding: 0;
+  border: 0; border-radius: var(--pill); background: transparent; color: var(--muted); cursor: pointer;
+  transition: color var(--dur-close) var(--ease-out), background var(--dur-close) var(--ease-out);
+}
+.bg-iconbtn:hover { color: var(--ink); background: var(--surface-2); }
+.bg-iconbtn.is-pressed { color: var(--accent-ink); background: var(--accent-quiet); }
+.bg-iconbtn:disabled { color: var(--disabled-ink); background: transparent; }
+.bg-iconbtn-sm { width: 28px; height: 28px; }
+
+/* ---- Chip ---- */
+.bg-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  min-height: 30px; padding: 0 12px;
+  border: 1px solid var(--line-strong); border-radius: var(--pill);
+  background: transparent; color: var(--muted);
+  font-size: var(--text-button-size); font-weight: var(--text-button-weight); white-space: nowrap; cursor: pointer;
+  transition: background var(--dur-hover) var(--ease-out), color var(--dur-hover) var(--ease-out), border-color var(--dur-hover) var(--ease-out);
+}
+.bg-chip:hover { background: var(--surface-2); color: var(--ink); }
+.bg-chip[aria-pressed='true'] { background: var(--accent-quiet); border-color: var(--accent-ink); color: var(--accent-ink); }
+.bg-chip[aria-pressed='true']::before { content: '\2713' / ''; font-size: 12px; }
+
+/* ---- Fields ---- */
+.bg-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.bg-field-label { font-size: var(--text-button-size); font-weight: 500; color: var(--ink); }
+.bg-input {
+  width: 100%; min-height: 38px; padding: 0 12px;
+  background: var(--surface); color: var(--ink);
+  border: 1px solid var(--border-control); border-radius: var(--radius-sm);
+  font-size: 14px;
+  transition: border-color var(--dur-hover) var(--ease-out);
+}
+.bg-input::placeholder { color: var(--muted); }
+.bg-input:hover { border-color: var(--ink); }
+.bg-input:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; border-color: var(--ink); }
+.bg-input:disabled { background: var(--disabled-fill); border-color: transparent; color: var(--disabled-ink); }
+.bg-input-error { border-color: var(--warn); }
+.bg-input.mono { font-family: var(--font-mono); font-size: 13px; }
+.bg-textarea { min-height: 84px; padding: 9px 12px; resize: vertical; line-height: 1.5; }
+.bg-field-msg { margin: 0; font-size: 12.5px; color: var(--muted); }
+.bg-field-msg-error { color: var(--warn); }
+.bg-field-msg-error strong { font-weight: 600; }
+.bg-select { position: relative; }
+.bg-select select { appearance: none; padding-inline-end: 34px; cursor: pointer; }
+.bg-select::after {
+  content: ''; position: absolute; inset-inline-end: 14px; top: 50%; width: 7px; height: 7px; margin-top: -5px;
+  border-inline-end: 1.6px solid var(--muted); border-bottom: 1.6px solid var(--muted); transform: rotate(45deg); pointer-events: none;
+}
+
+/* ---- Switch ---- */
+.switch-row { display: flex; flex-direction: column; gap: 2px; }
+.bg-switch {
+  display: inline-flex; align-items: center; gap: 12px; min-height: 36px; padding: 0;
+  border: 0; background: transparent; color: var(--ink); font-size: 14px; text-align: start; cursor: pointer;
+}
+.bg-switch-track {
+  position: relative; width: var(--switch-w); height: var(--switch-h); flex: none;
+  border: 1.6px solid var(--border-control); border-radius: var(--pill); background: var(--surface-2);
+  transition: background var(--dur-hover) var(--ease-out), border-color var(--dur-hover) var(--ease-out);
+}
+.bg-switch-thumb {
+  position: absolute; top: 50%; inset-inline-start: 3px; width: 16px; height: 16px; margin-top: -8px;
+  border-radius: 50%; background: var(--muted);
+  transition: inset-inline-start var(--dur-hover) var(--ease-out), background var(--dur-hover) var(--ease-out);
+}
+.bg-switch[aria-checked='true'] .bg-switch-track { background: var(--accent); border-color: var(--accent-ink); }
+.bg-switch[aria-checked='true'] .bg-switch-thumb { inset-inline-start: 21px; background: var(--on-accent); }
+.bg-switch:disabled { color: var(--disabled-ink); }
+.bg-switch:disabled .bg-switch-track { background: var(--disabled-fill); border-color: transparent; }
+
+/* ---- Checkbox (added) ---- */
+.checkbox { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
+.checkbox input {
+  appearance: none; flex: none; width: 18px; height: 18px; margin: 0;
+  border: 1.6px solid var(--border-control); border-radius: 5px; background: var(--surface);
+  display: grid; place-items: center; cursor: pointer;
+}
+.checkbox input:checked, .checkbox input:indeterminate { background: var(--accent); border-color: var(--accent-ink); }
+.checkbox input:checked::after { content: ''; width: 9px; height: 5px; margin-top: -2px; border-inline-start: 2px solid var(--on-accent); border-bottom: 2px solid var(--on-accent); transform: rotate(-45deg); }
+.checkbox input:indeterminate::after { content: ''; width: 9px; height: 2px; background: var(--on-accent); }
+.checkbox input:disabled { border-color: var(--line); background: var(--disabled-fill); cursor: not-allowed; }
+
+/* ---- Dialog ---- */
+.bg-scrim {
+  position: fixed; inset: 0; z-index: var(--z-dialog);
+  display: grid; place-items: center; padding: var(--space-5);
+  background: var(--scrim);
+  animation: fade-in var(--dur-medium) var(--ease-enter);
+}
+.bg-dialog {
+  display: flex; flex-direction: column; width: min(var(--dialog-w), 100%); max-height: calc(100vh - 48px);
+  background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--radius);
+  box-shadow: var(--shadow-dialog);
+  animation: rise-in var(--dur-medium) var(--ease-enter);
+}
+.bg-dialog-question { width: min(440px, 100%); }
+.bg-dialog-wide { width: min(var(--dialog-w-wide), 100%); height: calc(100vh - 64px); }
+/* (added) A list to read before acting: as tall as its content, at most the window. */
+.bg-dialog-list { width: min(760px, 100%); max-height: calc(100vh - 64px); }
+.bg-dialog-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 18px 0 var(--space-6); }
+.bg-dialog-title { margin: 0; font-size: var(--text-h3-size); line-height: 1.3; font-weight: 600; }
+.bg-dialog-body { flex: 1; min-height: 0; overflow: auto; padding: var(--space-4) var(--space-6); }
+.bg-dialog-text { color: var(--muted); font-size: 14px; line-height: 1.6; white-space: pre-line; }
+.bg-dialog-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: var(--space-2); padding: var(--space-4) var(--space-6) var(--space-5); border-top: 1px solid var(--line); }
+@keyframes fade-in { from { opacity: 0; } }
+@keyframes rise-in { from { opacity: 0; transform: translateY(8px) scale(0.99); } }
+
+/* ---- Snackbar stack (added: the stack) ---- */
+.snackbars {
+  /* At the start of the main area: primary actions (Import, Save) sit at the end, and a stack of
+     notices there covered the review's main button for seconds. */
+  position: fixed; inset-inline-start: calc(var(--sidebar-w) + 20px); bottom: calc(var(--statusbar-h) + 16px); z-index: var(--z-snackbar);
+  display: flex; flex-direction: column; gap: 8px; align-items: flex-start; pointer-events: none;
+}
+.bg-snackbar {
+  display: flex; align-items: center; gap: 10px; min-height: 44px; max-width: 520px;
+  padding: 6px 6px 6px 14px; pointer-events: auto;
+  background: var(--surface-2); border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-menu); font-size: 13px; color: var(--ink);
+  animation: rise-in var(--dur-medium) var(--ease-enter);
+}
+.bg-snackbar p { margin: 0; flex: 1; }
+.snackbar-action { color: var(--accent-ink); }
+
+/* ---- Note ---- */
+.bg-note { display: flex; gap: 12px; padding: 14px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm); }
+.bg-note p { margin: 0; font-size: 13px; color: var(--muted); }
+.bg-note p strong { display: block; color: var(--ink); font-size: 14px; font-weight: 600; margin-bottom: 2px; }
+.bg-note .icon { margin-top: 2px; }
+
+/* ---- Badge (added) ---- */
+.badge {
+  display: inline-flex; align-items: center; gap: 4px; max-width: 100%; min-width: 0;
+  min-height: 22px; padding: 0 9px; border: 1px solid var(--line-strong); border-radius: var(--pill);
+  font-size: 12px; font-weight: 500; line-height: 1; color: var(--muted); white-space: nowrap;
+}
+.badge-warn { border-color: color-mix(in srgb, var(--warn) 60%, transparent); color: var(--warn); }
+.badge-ok { border-color: color-mix(in srgb, var(--ok) 60%, transparent); color: var(--ok); }
+.badge-info { border-color: color-mix(in srgb, var(--info) 60%, transparent); color: var(--info); }
+.badge .icon { flex: none; }
+
+/* ---- Empty state (added) ---- */
+.empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 48px 24px; text-align: center; margin: auto; max-width: 480px; }
+.empty-icon { display: grid; place-items: center; width: 56px; height: 56px; border-radius: var(--radius); border: 1px solid var(--line-strong); color: var(--muted); }
+.empty-state h2 { font-size: var(--text-h3-size); }
+.empty-state p { color: var(--muted); font-size: 14px; }
+.empty-actions { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; justify-content: center; }
+
+/* ---- Tabs (added) ---- */
+.tabs { display: inline-flex; gap: 4px; padding: 3px; border: 1px solid var(--line-strong); border-radius: var(--pill); }
+.tab { display: inline-flex; align-items: center; gap: 6px; min-height: 28px; padding: 0 12px; border: 0; border-radius: var(--pill); background: transparent; color: var(--muted); font-size: 13px; font-weight: 500; }
+.tab:hover { color: var(--ink); background: var(--surface-2); }
+.tab[aria-selected='true'] { background: var(--accent-quiet); color: var(--accent-ink); }
+
