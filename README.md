@@ -11,7 +11,7 @@ only what is new. The phone needs no app and no root.
 
 <br clear="left">
 
-> **Not fully tested yet.** Version 2.0.0 is tested against a simulated adb server that behaves
+> **Not fully tested yet.** Version 2.0.1 is tested against a simulated adb server that behaves
 > like a phone (including a cable pulled out half way), and on GitHub's Windows runners it
 > downloads Google's real adb and talks to its server. It has not been used with a real phone yet.
 

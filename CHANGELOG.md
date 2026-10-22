@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.0.1
+
+- A part file left by a copy that was closed half way (`.adbdata-<number>.part`) is removed the
+  next time adbData copies into that folder.
+- When the checksum check removed a copy that differed from the phone's, its size still counted
+  in the copy's total; it no longer does.
+
 ## 2.0.0
 
 adbData is now a Windows app with a window instead of a PowerShell menu.

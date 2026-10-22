@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "adbdata"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "adbdata-core",
  "serde",
@@ -19,7 +19,7 @@ dependencies = [
 
 [[package]]
 name = "adbdata-core"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "md-5",
  "serde",
