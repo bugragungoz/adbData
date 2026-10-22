@@ -496,6 +496,36 @@ fn free_name(to: &Path) -> PathBuf {
         .expect("a free name")
 }
 
+/// The temporary name a copy is written under until it is complete.
+fn part_name() -> String {
+    format!(".adbdata-{}.part", std::process::id())
+}
+
+/// Removes temporary files an earlier adbData left in `dir` when it was closed half way through a
+/// file. Only one adbData runs at a time, so another one's part file is a leftover; one changed in
+/// the last ten minutes is left alone all the same.
+fn remove_stale_parts(dir: &Path) {
+    let Ok(entries) = fs::read_dir(dir) else { return };
+    let ours = part_name();
+    for e in entries.flatten() {
+        let name = e.file_name().to_string_lossy().into_owned();
+        let leftover = name != ours
+            && name
+                .strip_prefix(".adbdata-")
+                .and_then(|r| r.strip_suffix(".part"))
+                .is_some_and(|pid| !pid.is_empty() && pid.bytes().all(|b| b.is_ascii_digit()));
+        let old = e
+            .metadata()
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(|t| t.elapsed().ok())
+            .is_some_and(|age| age > Duration::from_secs(600));
+        if leftover && old {
+            let _ = fs::remove_file(e.path());
+        }
+    }
+}
+
 /// Copies the plan's files from the phone.
 pub fn pull(
     server: &Server,
@@ -508,11 +538,15 @@ pub fn pull(
     let mut runner = Runner::new(server, serial, stop);
     // Where each copy ended up: its planned name, or a numbered one if that appeared meanwhile.
     let placed = std::cell::RefCell::new(HashMap::<String, PathBuf>::new());
+    let mut cleaned = std::collections::HashSet::<PathBuf>::new();
     let mut step =
         |conn: &mut Sync<TcpStream>, job: &crate::plan::Job<String, PathBuf>, progress: &mut dyn FnMut(u64) -> bool| {
             let dir = job.to.parent().unwrap_or(Path::new("."));
             fs::create_dir_all(dir).map_err(SyncError::Local)?;
-            let part = dir.join(format!(".adbdata-{}.part", std::process::id()));
+            if cleaned.insert(dir.to_path_buf()) {
+                remove_stale_parts(dir);
+            }
+            let part = dir.join(part_name());
             let file = File::create(&part).map_err(SyncError::Local)?;
             let mut out = Hashing {
                 inner: BufWriter::with_capacity(1 << 20, file),
@@ -802,6 +836,45 @@ mod tests {
         let (_, outcome) = pull_all(&adb, &root.join("pc2"), Existing::Skip, o);
         assert!(outcome.check_unavailable);
         assert_eq!((outcome.copied, outcome.checked), (4, 0));
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn leftovers_of_an_earlier_run_are_removed() {
+        let (root, adb) = phone("leftover");
+        let camera = root.join("pc/Camera");
+        fs::create_dir_all(&camera).unwrap();
+        let old = UNIX_EPOCH + Duration::from_secs(1_600_000_000);
+        for name in [
+            ".adbdata-4242.part",
+            ".adbdata-77.part",
+            "notes.part",
+            ".adbdata-x.part",
+        ] {
+            fs::write(camera.join(name), b"half").unwrap();
+            File::options()
+                .write(true)
+                .open(camera.join(name))
+                .unwrap()
+                .set_modified(old)
+                .unwrap();
+        }
+        fs::write(camera.join(".adbdata-88.part"), b"just now").unwrap();
+        let (_, outcome) = pull_all(&adb, &root.join("pc"), Existing::Skip, RunOptions::default());
+        assert!(outcome.failed.is_empty());
+        let left: Vec<String> = fs::read_dir(&camera)
+            .unwrap()
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .filter(|n| n.ends_with(".part"))
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect();
+        assert_eq!(
+            left,
+            [".adbdata-88.part", ".adbdata-x.part", "notes.part"],
+            "only old adbData leftovers go"
+        );
         let _ = fs::remove_dir_all(&root);
     }
 
