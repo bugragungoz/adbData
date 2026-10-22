@@ -176,6 +176,14 @@ pub struct Outcome {
     pub seconds: f64,
 }
 
+/// A file copied with its MD5, waiting to be compared with the phone's.
+struct Copied {
+    phone: String,
+    pc: String,
+    hash: String,
+    size: u64,
+}
+
 /// How long to wait before each new attempt after the connection broke.
 const RETRY_WAITS: [Duration; 3] = [
     Duration::from_millis(500),
@@ -348,12 +356,7 @@ impl<'a> Runner<'a> {
 
     /// Compares the MD5 of each copied file with the phone's; `remove` takes away a copy that
     /// differs, so copying again does not skip it.
-    fn check(
-        &mut self,
-        pairs: Vec<(String, String, String)>,
-        remove: &mut dyn FnMut(&str, &str),
-        on: &mut dyn FnMut(Event),
-    ) {
+    fn check(&mut self, pairs: Vec<Copied>, remove: &mut dyn FnMut(&str, &str), on: &mut dyn FnMut(Event)) {
         let total = pairs.len();
         let mut done = 0;
         for batch in batches(&pairs) {
@@ -363,11 +366,7 @@ impl<'a> Runner<'a> {
             }
             let command = format!(
                 "md5sum {}",
-                batch
-                    .iter()
-                    .map(|(phone, _, _)| quote(phone))
-                    .collect::<Vec<_>>()
-                    .join(" ")
+                batch.iter().map(|c| quote(&c.phone)).collect::<Vec<_>>().join(" ")
             );
             let answer = match self.server.shell(self.serial, &command) {
                 Ok(a) => a,
@@ -381,16 +380,18 @@ impl<'a> Runner<'a> {
                 return;
             }
             let phone_hashes = parse_md5sum(&answer);
-            for (phone, pc, hash) in batch {
-                match phone_hashes.get(phone.as_str()) {
-                    Some(h) if h == hash => self.outcome.checked += 1,
+            for c in batch {
+                match phone_hashes.get(c.phone.as_str()) {
+                    Some(h) if *h == c.hash => self.outcome.checked += 1,
                     Some(h) => {
-                        remove(phone, pc);
+                        remove(&c.phone, &c.pc);
+                        // The copy is gone, so it no longer counts as copied, in files or bytes.
                         self.outcome.copied -= 1;
+                        self.outcome.bytes = self.outcome.bytes.saturating_sub(c.size);
                         self.outcome.failed.push(Failure {
-                            path: phone.clone(),
+                            path: c.phone.clone(),
                             code: "mismatch".into(),
-                            detail: format!("{hash} here, {h} on the phone"),
+                            detail: format!("{} here, {h} on the phone", c.hash),
                         });
                     }
                     // Not answered (a name md5sum escapes): left as copied, not checked.
@@ -409,12 +410,12 @@ impl<'a> Runner<'a> {
 }
 
 /// Groups of paths short enough for one shell command.
-fn batches(pairs: &[(String, String, String)]) -> Vec<&[(String, String, String)]> {
+fn batches(pairs: &[Copied]) -> Vec<&[Copied]> {
     const MAX: usize = 30_000;
     let mut out = Vec::new();
     let (mut start, mut len) = (0, 0);
-    for (i, (phone, _, _)) in pairs.iter().enumerate() {
-        let n = phone.len() + 3;
+    for (i, c) in pairs.iter().enumerate() {
+        let n = c.phone.len() + 3;
         if len + n > MAX && i > start {
             out.push(&pairs[start..i]);
             start = i;
@@ -548,13 +549,17 @@ pub fn pull(
     let hashes = runner.run(&plan.jobs, |j| j.from.clone(), |j| j.size, &mut step, on);
     if o.check && !runner.outcome.stopped {
         let placed = placed.borrow();
-        let pairs: Vec<(String, String, String)> = plan
+        let pairs: Vec<Copied> = plan
             .jobs
             .iter()
             .zip(&hashes)
             .filter_map(|(j, h)| {
-                let to = placed.get(&j.from)?;
-                Some((j.from.clone(), to.to_string_lossy().into_owned(), h.clone()?))
+                Some(Copied {
+                    phone: j.from.clone(),
+                    pc: placed.get(&j.from)?.to_string_lossy().into_owned(),
+                    hash: h.clone()?,
+                    size: j.size,
+                })
             })
             .collect();
         runner.check(pairs, &mut |_, pc| drop(fs::remove_file(pc)), on);
@@ -585,11 +590,18 @@ pub fn push(
         };
     let hashes = runner.run(&plan.jobs, |j| j.to.clone(), |j| j.size, &mut step, on);
     if o.check && !runner.outcome.stopped {
-        let pairs: Vec<(String, String, String)> = plan
+        let pairs: Vec<Copied> = plan
             .jobs
             .iter()
             .zip(&hashes)
-            .filter_map(|(j, h)| Some((j.to.clone(), j.from.to_string_lossy().into_owned(), h.clone()?)))
+            .filter_map(|(j, h)| {
+                Some(Copied {
+                    phone: j.to.clone(),
+                    pc: j.from.to_string_lossy().into_owned(),
+                    hash: h.clone()?,
+                    size: j.size,
+                })
+            })
             .collect();
         let (server, serial) = (runner.server, runner.serial);
         runner.check(
@@ -773,9 +785,14 @@ mod tests {
             keep_dates: true,
             check: true,
         };
-        let (_, outcome) = pull_all(&adb, &root.join("pc"), Existing::Skip, o);
+        let (plan, outcome) = pull_all(&adb, &root.join("pc"), Existing::Skip, o);
         assert_eq!((outcome.copied, outcome.checked), (3, 3));
         assert_eq!(outcome.failed[0].code, "mismatch");
+        assert_eq!(
+            outcome.bytes,
+            plan.bytes - 3,
+            "the removed copy's bytes are not counted"
+        );
         assert!(
             !root.join("pc/Camera/IMG_1.jpg").exists(),
             "so copying again does not skip it"
@@ -874,13 +891,12 @@ mod tests {
 
     #[test]
     fn checksum_commands_stay_short() {
-        let pairs: Vec<(String, String, String)> = (0..2000)
-            .map(|i| {
-                (
-                    format!("/sdcard/DCIM/Camera/IMG_{i:05}_long_name.jpg"),
-                    String::new(),
-                    String::new(),
-                )
+        let pairs: Vec<Copied> = (0..2000)
+            .map(|i| Copied {
+                phone: format!("/sdcard/DCIM/Camera/IMG_{i:05}_long_name.jpg"),
+                pc: String::new(),
+                hash: String::new(),
+                size: 0,
             })
             .collect();
         let groups = batches(&pairs);
@@ -888,6 +904,6 @@ mod tests {
         assert_eq!(groups.iter().map(|g| g.len()).sum::<usize>(), 2000);
         assert!(groups
             .iter()
-            .all(|g| g.iter().map(|p| p.0.len() + 3).sum::<usize>() <= 30_000));
+            .all(|g| g.iter().map(|p| p.phone.len() + 3).sum::<usize>() <= 30_000));
     }
 }
